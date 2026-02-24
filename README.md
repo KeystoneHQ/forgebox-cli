@@ -10,7 +10,6 @@ ForgeBox hardware wallet management tool. This tool is used to generate secure c
 - **list-devices**: List all connected USB devices.
 - **interactive** (alias `i`): Start interactive menu mode with common operations.
 - **sign**: Package firmware into an OTA-signed file.
-- **verify**: Verify OTA file signature validity.
 
 ## Installation & Build
 
