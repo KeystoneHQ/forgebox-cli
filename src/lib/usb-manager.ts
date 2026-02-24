@@ -21,8 +21,10 @@ export class UsbManager {
     const result: ConnectedDeviceInfo[] = [];
 
     for (const device of devices) {
-      // 过滤逻辑：如果知道 VID/PID 可以这里过滤
-      // 例如: if (device.deviceDescriptor.idVendor !== 0x1234) continue;
+      // 过滤逻辑：只显示指定 VID/PID 的设备 (ForgeBox)
+      if (device.deviceDescriptor.idVendor !== 0x1209 || device.deviceDescriptor.idProduct !== 0x3001) {
+        continue;
+      }
       
       let manufacturer = 'Unknown';
       let product = 'Unknown';

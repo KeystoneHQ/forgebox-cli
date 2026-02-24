@@ -1,5 +1,9 @@
 import { TransportNodeUSB } from '@keystonehq/hw-transport-nodeusb';
+import { getDeviceList, WebUSBDevice } from 'usb';
 import { IUsbDevice, IDeviceInfo } from './usb-interface';
+
+const VENDOR_ID = 0x1209; // 4617
+const PRODUCT_ID = 0x3001; // 12289
 import { Actions } from '@keystonehq/hw-transport-usb';
 // enum Actions {
 //   CMD_GET_DEVICE_USB_PUBKEY = 6 // Ensure this matches firmware definition
@@ -8,8 +12,8 @@ import { Actions } from '@keystonehq/hw-transport-usb';
 export class KeystoneDevice implements IUsbDevice {
   private transport: any | null = null;
   private _info: IDeviceInfo = {
-    vendorId: 0,
-    productId: 0,
+    vendorId: 0x1209,
+    productId: 0x3001,
     manufacturer: 'ForgeBox',
     product: 'Hardware Wallet',
     serialNumber: 'UNKNOWN'
@@ -17,8 +21,22 @@ export class KeystoneDevice implements IUsbDevice {
 
   async connect(): Promise<void> {
     try {
-      // 自动查找并连接第一个可用的 USB 设备
-      // 如果需要过滤特定 VID/PID，可能需要查看库的高级配置
+      // 显式查找并过滤设备 (VID: 0x1209, PID: 0x3001)
+      const devices = getDeviceList();
+      let targetDevice: WebUSBDevice | null = null;
+
+      for (const device of devices) {
+        const webusbDevice = await WebUSBDevice.createInstance(device);
+        if (webusbDevice.vendorId === VENDOR_ID && webusbDevice.productId === PRODUCT_ID) {
+          targetDevice = webusbDevice;
+          break;
+        }
+      }
+
+      if (!targetDevice) {
+        // 如果未找到指定设备，抛出特定错误
+        throw new Error(`ForgeBox device not found (VID: 0x${VENDOR_ID.toString(16)}, PID: 0x${PRODUCT_ID.toString(16)})`);
+      }
 
       const config = {
           // endpoint: 0x01, // 默认通常是 1
@@ -29,7 +47,12 @@ export class KeystoneDevice implements IUsbDevice {
           // }
       }
 
-      this.transport = await TransportNodeUSB.connect(config);
+      // 使用找到的设备直接连接
+      // 由于项目依赖结构导致 usb 库可能存在多份实例，类型系统认为是不同的类
+      // 这里使用 as any 绕过类型检查，因为运行时对象是兼容的
+      this.transport = new TransportNodeUSB(targetDevice as any, config);
+      await this.transport.open();
+
     } catch (error) {
       // 抛出错误以便上层捕获并降级到 Mock
       throw error;
