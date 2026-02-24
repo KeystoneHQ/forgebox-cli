@@ -1,7 +1,8 @@
 import { IUsbDevice } from './usb-interface';
 import { KeystoneDevice } from './keystone-device';
 import { getDeviceList } from 'usb';
-
+const VENDOR_ID = 0x1209; // 4617
+const PRODUCT_ID = 0x3001; // 12289
 export interface ConnectedDeviceInfo {
   vendorId: number;
   productId: number;
@@ -22,7 +23,7 @@ export class UsbManager {
 
     for (const device of devices) {
       // 过滤逻辑：只显示指定 VID/PID 的设备 (ForgeBox)
-      if (device.deviceDescriptor.idVendor !== 0x1209 || device.deviceDescriptor.idProduct !== 0x3001) {
+      if (device.deviceDescriptor.idVendor !== VENDOR_ID || device.deviceDescriptor.idProduct !== PRODUCT_ID) {
         continue;
       }
       
