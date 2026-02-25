@@ -1,4 +1,5 @@
-import { TransportNodeUSB } from '@keystonehq/hw-transport-nodeusb';
+// import { TransportNodeUSB } from '@keystonehq/hw-transport-nodeusb';
+import { TransportWebUSB } from '@keystonehq/hw-transport-webusb';
 import { getDeviceList, WebUSBDevice } from 'usb';
 import { IUsbDevice, IDeviceInfo } from './usb-interface';
 
@@ -50,9 +51,9 @@ export class KeystoneDevice implements IUsbDevice {
       // 使用找到的设备直接连接
       // 由于项目依赖结构导致 usb 库可能存在多份实例，类型系统认为是不同的类
       // 这里使用 as any 绕过类型检查，因为运行时对象是兼容的
-      this.transport = new TransportNodeUSB(targetDevice as any, config);
+      // this.transport = new TransportNodeUSB(targetDevice as any, config);
+      this.transport = new TransportWebUSB(targetDevice as any, config);
       await this.transport.open();
-
     } catch (error) {
       // 抛出错误以便上层捕获并降级到 Mock
       throw error;
@@ -87,7 +88,26 @@ export class KeystoneDevice implements IUsbDevice {
     try {
       // CMD_GET_DEVICE_USB_PUBKEY
       const response = await this.transport.send(Actions.CMD_GET_DEVICE_USB_PUBKEY, payload);
-      console.log('registerPublicKey response:', response);
+      
+      let hexResponse = '';
+      if (Buffer.isBuffer(response)) {
+        hexResponse = response.toString('hex');
+      } else if (response instanceof DataView) {
+        hexResponse = Buffer.from(response.buffer, response.byteOffset, response.byteLength).toString('hex');
+      } else if (response instanceof Uint8Array) {
+        hexResponse = Buffer.from(response).toString('hex');
+      } else if (typeof response === 'string') {
+        // Handle binary string
+        hexResponse = Buffer.from(response, 'latin1').toString('hex');
+      } else {
+        try {
+            hexResponse = JSON.stringify(response);
+        } catch (e) {
+            hexResponse = String(response);
+        }
+      }
+      console.log('registerPublicKey response (hex/json):', hexResponse);
+      
       return !!response
     } catch (e: any) {
       // { data: 'verify pubkey success', status: 22 } 

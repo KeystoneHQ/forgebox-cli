@@ -30,6 +30,7 @@
   "dependencies": {
     "@keystonehq/hw-transport-nodeusb": "0.1.1-alpha.0",
     "@keystonehq/hw-transport-usb": "0.1.4-alpha.0",
+    "@keystonehq/hw-transport-webusb": "^0.5.2",
     "usb": "^2.17.0"
   }
 }
