@@ -1,15 +1,15 @@
 # ForgeBox CLI
 
-ForgeBox 硬件钱包管理工具。此工具用于生成安全凭证、管理硬件设备公钥注册，以及执行签名验证。
+ForgeBox 硬件钱包管理工具。此工具用于生成安全凭证、管理硬件设备公钥注册，以及执行签名。
 
 ## 功能特性
 
+- **list-devices**: 列出所有连接的 USB 设备。
+- **status**: 获取设备详细信息（固件版本、序列号等）。
 - **keygen**: 生成 secp256k1 标准公私钥对 (PEM 格式)。
 - **register**: 将公钥写入 ForgeBox 硬件设备，支持用户滑动确认 (Swipe-to-Confirm)。
-- **status**: 获取设备详细信息（固件版本、序列号等）。
-- **list-devices**: 列出所有连接的 USB 设备。
-- **interactive** (alias `i`): 启动交互式菜单模式，支持所有常用操作。
 - **sign**: 对固件进行 OTA 签名打包。
+- **interactive** (alias `i`): 启动交互式菜单模式，支持所有常用操作。
 
 ## 安装与构建
 
@@ -25,7 +25,43 @@ npm run build
 
 ## 使用指南
 
-### 1. 生成凭证 (Keygen)
+### 1. 列出设备 (List Devices)
+
+列出当前连接的所有 USB 设备信息。
+
+```bash
+forgebox list-devices
+```
+
+**输出示例：**
+```
+Found 1 device(s):
+
+Product                        Manufacturer         Serial               VID     PID     
+--------------------------------------------------------------------------------------
+ForgeBox                 Keystone             M-KYTJ69ND           0x1209  0x3001  
+```
+
+### 2. 查看设备状态 (Status)
+
+获取已连接设备的详细状态信息，包括型号、序列号、固件版本等。
+
+```bash
+forgebox status
+```
+
+**输出示例：**
+```
+✓ Device Information:
+  Model: ForgeBox
+  Firmware Version: 12.2.10
+  Hardware Version: v2.0
+  Serial Number: M-KYTJ69ND
+
+  Protocol Status: Connected
+```
+
+### 3. 生成凭证 (Keygen)
 
 生成符合 secp256k1 标准的公私钥对。
 
@@ -41,23 +77,7 @@ forgebox keygen --out ./my-keys
 
 > ⚠️ **注意**：请妥善保管 `private.pem`，泄露私钥意味着安全风险。
 
-### 2. 交互模式 (Interactive)
-
-启动交互式菜单，方便地执行常用操作。
-
-```bash
-forgebox i
-# 或者
-forgebox interactive
-```
-
-**功能菜单：**
-- **List Devices**: 列出连接的设备。
-- **Get Device Status**: 查看设备详情。
-- **Generate Key Pair**: 交互式生成密钥对。
-- **Send K1 Public Key**: 注册公钥（支持从文件加载或手动输入 Hex）。
-
-### 3. 注册公钥 (Register)
+### 4. 注册公钥 (Register)
 
 将公钥写入 ForgeBox 硬件设备。为了安全起见，此过程需要提供对应的私钥以生成“持有权证明”（Proof of Possession）。
 
@@ -79,43 +99,7 @@ forgebox register --pubkey ./my-keys/pubkey.pem --key ./my-keys/private.pem
 4. **用户操作**：在硬件设备上核对指纹无误后，滑动屏幕以确认写入。
 5. 设备验证签名有效性，确认后保存公钥。
 
-### 4. 列出设备 (List Devices)
-
-列出当前连接的所有 USB 设备信息。
-
-```bash
-forgebox list-devices
-```
-
-**输出示例：**
-```
-Found 1 device(s):
-
-Product                        Manufacturer         Serial               VID     PID     
---------------------------------------------------------------------------------------
-Keystone 3 Pro                 Keystone             M-KYTJ69ND           0x1209  0x3001  
-```
-
-### 5. 查看设备状态 (Status)
-
-获取已连接设备的详细状态信息，包括型号、序列号、固件版本等。
-
-```bash
-forgebox status
-```
-
-**输出示例：**
-```
-✓ Device Information:
-  Model: Keystone 3 Pro
-  Firmware Version: 12.2.10
-  Hardware Version: v2.0
-  Serial Number: M-KYTJ69ND
-
-  Protocol Status: Connected
-```
-
-### 6. 固件签名 (Sign)
+### 5. 固件签名 (Sign)
 将固件文件处理为可用于升级的 OTA 签名包。
 
 #### 1. 固件打包（Build Firmware）
@@ -125,7 +109,7 @@ forgebox status
 npm run build:firmware
 ```
 
-这将在 `ForgeBox_cli/my-firmware` 目录下生成 `mh1903_full.bin` 文件，这是完整的 Keystone 3 Pro 固件，接下来我们将对这个固件进行签名。
+这将在 `ForgeBox_cli/my-firmware` 目录下生成 `mh1903_full.bin` 文件，这是完整的 ForgeBox 固件，接下来我们将对这个固件进行签名。
 
 **注意：** 前提是需要将keystone3-firmware工程和ForgeBox_cli工程放在同一个目录下，并且keystone3-firmware工程环境已成功配置，并且已经成功编译。否则，需要先编译keystone3-firmware工程（参考keystone3-firmware工程的README.md）。
 
@@ -154,4 +138,20 @@ forgebox sign --s ./my-firmware/mh1903_full.bin --d ./my-firmware/forgebox.bin -
 2. 计算压缩数据和原始数据的 SHA256。
 3. 使用私钥对哈希进行签名并写入头部。
 4. 输出可直接用于升级的 OTA 文件。
+
+### 6. 交互模式 (Interactive)
+
+启动交互式菜单，方便地执行常用操作。
+
+```bash
+forgebox i
+# 或者
+forgebox interactive
+```
+
+**功能菜单：**
+- **List Devices**: 列出连接的设备。
+- **Get Device Status**: 查看设备详情。
+- **Generate Key Pair**: 交互式生成密钥对。
+- **Send K1 Public Key**: 注册公钥（支持从文件加载或手动输入 Hex）。
 
