@@ -116,9 +116,20 @@ forgebox status
 ```
 
 ### 6. 固件签名 (Sign)
-
 将固件文件处理为可用于升级的 OTA 签名包。
 
+#### 1. 固件打包（Build Firmware）
+在 `ForgeBox_cli` 目录下执行：
+
+```bash
+npm run build:firmware
+```
+
+这将在 `ForgeBox_cli/my-firmware` 目录下生成 `mh1903_full.bin` 文件，这是完整的 Keystone 3 Pro 固件，接下来我们将对这个固件进行签名。
+
+**注意：** 前提是需要将keystone3-firmware工程和ForgeBox_cli工程放在同一个目录下，并且keystone3-firmware工程环境已成功配置，并且已经成功编译。否则，需要先编译keystone3-firmware工程（参考keystone3-firmware工程的README.md）。
+
+#### 2. 固件签名（Sign Firmware）
 ```bash
 forgebox sign --s <源固件文件> --d <签名后文件> --key <私钥文件或hex>
 ```
@@ -136,6 +147,7 @@ forgebox sign --s ./my-firmware/mh1903_full.bin --d ./my-firmware/forgebox.bin -
 # 使用私钥 hex 进行签名
 forgebox sign --s ./my-firmware/mh1903_full.bin --d ./my-firmware/forgebox.bin --key your_private_key_hex
 ```
+其中`./my-firmware/mh1903_full.bin`是完整的ForgeBox固件文件路径，路径可自定义。
 
 **执行逻辑：**
 1. CLI 按 OTA 格式对固件进行压缩分块处理。
