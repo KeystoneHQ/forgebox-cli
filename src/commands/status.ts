@@ -21,27 +21,14 @@ export function registerStatusCommand(program: Command) {
         
         console.log(chalk.green('\n✓ Device Information:'));
         
-        if (status.tlvArray && status.tlvArray.length > 0) {
-          status.tlvArray.forEach((tlv: any) => {
-            let label = 'Unknown';
-            let value = tlv.value ? tlv.value.toString('utf8').replace(/\0/g, '') : '';
-            
-            switch(tlv.type) {
-              case 1: label = 'Model'; break;
-              case 2: label = 'Serial Number'; break;
-              case 3: label = 'Hardware Version'; break;
-              case 4: label = 'Firmware Version'; break;
-              case 5: label = 'Boot Version'; break;
-              default: label = `Type ${tlv.type}`;
-            }
-            
-            console.log(chalk.gray(`  ${label}: ${chalk.white(value)}`));
-          });
+        if (status) {
+          console.log(chalk.gray(`  Model: ${chalk.white(status.model || 'Unknown')}`));
+          console.log(chalk.gray(`  Firmware: ${chalk.white(status.firmwareVersion || 'Unknown')}`));
+          console.log(chalk.gray(`  Serial: ${chalk.white(status.serialNumber || 'Unknown')}`));
+          console.log(chalk.gray(`  Hardware: ${chalk.white(status.hardwareVersion || 'Unknown')}`));
         } else {
           console.log(chalk.yellow('  No device information available'));
         }
-        
-        console.log(chalk.green(`\n  Protocol Status: ${status.statusMessage}`));
         
         await device.disconnect();
         

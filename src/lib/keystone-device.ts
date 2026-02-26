@@ -1,225 +1,254 @@
-import { TransportNodeUSB } from '@keystonehq/hw-transport-nodeusb';
-// import { TransportWebUSB } from '@keystonehq/hw-transport-webusb';
-import { getDeviceList, WebUSBDevice } from 'usb';
-import { IUsbDevice, IDeviceInfo } from './usb-interface';
 
-const VENDOR_ID = 0x1209; // 4617
-const PRODUCT_ID = 0x3001; // 12289
-import { Actions } from '@keystonehq/hw-transport-usb';
-// enum Actions {
-//   CMD_GET_DEVICE_USB_PUBKEY = 6 // Ensure this matches firmware definition
-// }
+import { getDeviceList, Device, Interface, InEndpoint, OutEndpoint } from 'usb';
+import { IUsbDevice, IDeviceInfo } from './usb-interface';
+import { 
+  buildEapduPackets, 
+  parseEapduResponse, 
+  CmdType, 
+  buildPacket,
+  parseResponse,
+  SERVICE_ID,
+  DEVICE_INFO_CMD,
+  TLV_TYPE,
+  PROTOCOL,
+  EapduResponse
+} from './usb-protocol';
+
+const VENDOR_ID = 0x1209;
+const PRODUCT_ID = 0x3001;
 
 export class KeystoneDevice implements IUsbDevice {
-  private transport: any | null = null;
+  private device: Device | null = null;
+  private interface: Interface | null = null;
+  private endpointIn: InEndpoint | null = null;
+  private endpointOut: OutEndpoint | null = null;
+  
   private _info: IDeviceInfo = {
-    vendorId: 0x1209,
-    productId: 0x3001,
+    vendorId: VENDOR_ID,
+    productId: PRODUCT_ID,
     manufacturer: 'ForgeBox',
     product: 'Hardware Wallet',
     serialNumber: 'UNKNOWN'
   };
 
   async connect(): Promise<void> {
+    // Ensure any previous connection is closed
+    await this.disconnect();
+
     try {
-      // 显式查找并过滤设备 (VID: 0x1209, PID: 0x3001)
       const devices = getDeviceList();
-      let targetDevice: WebUSBDevice | null = null;
+      let targetDevice: Device | null = null;
 
       for (const device of devices) {
-        const webusbDevice = await WebUSBDevice.createInstance(device);
-        if (webusbDevice.vendorId === VENDOR_ID && webusbDevice.productId === PRODUCT_ID) {
-          targetDevice = webusbDevice;
+        if (device.deviceDescriptor.idVendor === VENDOR_ID && device.deviceDescriptor.idProduct === PRODUCT_ID) {
+          targetDevice = device;
           break;
         }
       }
 
       if (!targetDevice) {
-        // 如果未找到指定设备，抛出特定错误
         throw new Error(`ForgeBox device not found (VID: 0x${VENDOR_ID.toString(16)}, PID: 0x${PRODUCT_ID.toString(16)})`);
       }
 
-      const config = {
-          // endpoint: 0x01, // 默认通常是 1
-          timeout: 60000, // 增加超时时间到 60秒，等待用户在设备上确认
-          // maxPacketSize: 64,
-          // disconnectListener: (device: any) => {
-          //   console.log('Device disconnected:', device);
-          // }
+      this.device = targetDevice;
+      this.device.open();
+
+      // Initialize interface
+      this.interface = this.device.interface(0);
+
+      // Detach kernel driver (Non-Windows)
+      if (process.platform !== 'win32') {
+        try {
+          if (this.interface.isKernelDriverActive()) {
+            this.interface.detachKernelDriver();
+          }
+        } catch (e) {
+          // Ignore detach error
+        }
       }
 
-      // 使用找到的设备直接连接
-      // 由于项目依赖结构导致 usb 库可能存在多份实例，类型系统认为是不同的类
-      // 这里使用 as any 绕过类型检查，因为运行时对象是兼容的
-      this.transport = new TransportNodeUSB(targetDevice as any, config);
-      // this.transport = new TransportWebUSB(targetDevice as any, config);
-      await this.transport.open();
-    } catch (error) {
-      // 抛出错误以便上层捕获并降级到 Mock
+      // Claim Interface
+      try {
+        this.interface.claim();
+      } catch (e: any) {
+        throw new Error(`Failed to claim interface: ${e.message}`);
+      }
+
+      // Find Endpoints
+      const endpoints = this.interface.endpoints;
+      this.endpointIn = endpoints.find(ep => ep.direction === 'in') as InEndpoint;
+      this.endpointOut = endpoints.find(ep => ep.direction === 'out') as OutEndpoint;
+
+      if (!this.endpointIn || !this.endpointOut) {
+        throw new Error('Could not find required endpoints (IN/OUT)');
+      }
+
+      // Update info from descriptors
+      try {
+        if (this.device.deviceDescriptor.iManufacturer) {
+            this.device.getStringDescriptor(this.device.deviceDescriptor.iManufacturer, (err, data) => {
+                if (!err && data) this._info.manufacturer = data.toString();
+            });
+        }
+        if (this.device.deviceDescriptor.iProduct) {
+            this.device.getStringDescriptor(this.device.deviceDescriptor.iProduct, (err, data) => {
+                if (!err && data) this._info.product = data.toString();
+            });
+        }
+        if (this.device.deviceDescriptor.iSerialNumber) {
+            this.device.getStringDescriptor(this.device.deviceDescriptor.iSerialNumber, (err, data) => {
+                if (!err && data) this._info.serialNumber = data.toString();
+            });
+        }
+      } catch (e) {}
+
+      console.log(`\n✔ Device connected: ${this._info.product} (Serial: ${this._info.serialNumber || 'Unknown'})`);
+
+    } catch (error: any) {
+      if (process.platform === 'win32') {
+         console.warn('\n⚠️  Windows Connection Issue detected.');
+         try {
+            console.log('\nPlease restart this CLI tool after installation completes.\n');
+            process.exit(1); 
+         } catch (e) {
+            console.error('Failed to run UsbDk installer helper:', e);
+         }
+      }
       throw error;
     }
   }
 
   async disconnect(): Promise<void> {
-    if (this.transport) {
-      await this.transport.close();
-      this.transport = null;
+    if (this.interface) {
+      try {
+        this.interface.release(true, (err) => {
+            if (err) console.error('Release interface failed:', err);
+        });
+      } catch(e) {}
+      this.interface = null;
     }
+    if (this.device) {
+      try {
+        this.device.close();
+      } catch(e) {}
+      this.device = null;
+    }
+    this.endpointIn = null;
+    this.endpointOut = null;
   }
 
   async registerPublicKey(publicKey: Buffer, signature: Buffer): Promise<boolean> {
-    if (!this.transport) throw new Error('Device not connected');
-    // C Firmware expects:
-    // 1. [1 byte] Public Key Length (33 or 65)
-    // 2. [N bytes] Public Key Data
-    // 3. [64 bytes] Signature
+    if (!this.device || !this.endpointOut) throw new Error('Device not connected');
 
-    const lenBuf = Buffer.alloc(1);
-    lenBuf.writeUInt8(publicKey.length);
-
-    const payload = Buffer.concat([
-      lenBuf,
-      publicKey,
-      signature
-      // Buffer.from(publicKey.toString('hex'), 'hex'),
-      // Buffer.from(signature.toString('hex'), 'hex')
-    ]);
-
-    try {
-      // CMD_GET_DEVICE_USB_PUBKEY
-      const response = await this.transport.send(Actions.CMD_GET_DEVICE_USB_PUBKEY, payload);
-      
-      let hexResponse = '';
-      if (Buffer.isBuffer(response)) {
-        hexResponse = response.toString('hex');
-      } else if (response instanceof DataView) {
-        hexResponse = Buffer.from(response.buffer, response.byteOffset, response.byteLength).toString('hex');
-      } else if (response instanceof Uint8Array) {
-        hexResponse = Buffer.from(response).toString('hex');
-      } else if (typeof response === 'string') {
-        // Handle binary string
-        hexResponse = Buffer.from(response, 'latin1').toString('hex');
-      } else {
-        try {
-            hexResponse = JSON.stringify(response);
-        } catch (e) {
-            hexResponse = String(response);
-        }
-      }
-      console.log('registerPublicKey response (hex/json):', hexResponse);
-      
-      return !!response
-    } catch (e: any) {
-      // { data: 'verify pubkey success', status: 22 } 
-      if (e.transportErrorCode === 22) {
-        console.log('Public key registered successfully');
-        return true;
-      }
-      console.error(e, "registerPublicKey failed");
-      throw e;
-    } finally {
-      await this.transport.close();
+    // Combine payload: publicKey + signature
+    // Assuming firmware expects raw data without length prefix for EAPDU
+    const data = Buffer.concat([publicKey, signature]);
+    
+    const packets = buildEapduPackets(CmdType.GET_DEVICE_USB_PUBKEY, data);
+    
+    console.log(`Sending ${packets.length} EAPDU packets...`);
+    for (const packet of packets) {
+        await this.sendRaw(packet);
+        // Small delay to ensure device processes packet
+        await new Promise(resolve => setTimeout(resolve, 20));
     }
+    
+    // Read response
+    try {
+        const response = await this.readEapduResponse();
+        console.log('registerPublicKey response:', response.statusMessage);
+        return response.success;
+    } catch (e: any) {
+        console.error('registerPublicKey failed:', e.message);
+        return false;
+    }
+  }
+  
+  async getStatus(): Promise<any> {
+      if (!this.device || !this.endpointOut) throw new Error('Device not connected');
+      
+      const packet = buildPacket(SERVICE_ID.DEVICE_INFO, DEVICE_INFO_CMD.BASIC, []);
+      await this.sendRaw(packet);
+      
+      const response = await this.readProtocolResponse();
+      
+      // Parse TLV to object
+      const result: any = {};
+      if (response.tlvArray) {
+          for (const tlv of response.tlvArray) {
+              const val = tlv.value.toString().replace(/\0/g, '');
+              if (tlv.type === TLV_TYPE.DEVICE_FIRMWARE_VERSION) {
+                  result.firmwareVersion = val;
+              } else if (tlv.type === TLV_TYPE.DEVICE_SERIAL_NUMBER) {
+                  result.serialNumber = val;
+              } else if (tlv.type === TLV_TYPE.DEVICE_MODEL) {
+                  result.model = val;
+              } else if (tlv.type === TLV_TYPE.DEVICE_HARDWARE_VERSION) {
+                  result.hardwareVersion = val;
+              }
+          }
+      }
+      return result;
+  }
+  
+  getInfo(): IDeviceInfo {
+      return this._info;
   }
 
   async verifySignature(data: Buffer, signature: Buffer): Promise<boolean> {
-    if (!this.transport) throw new Error('Device not connected');
-
-    // 示例：CLA=0x80, INS=0x02 (Verify)
-    // 简单拼接 payload：[data_len, ...data, ...signature]
-    const payload = Buffer.concat([
-      Buffer.from([data.length]),
-      data,
-      signature
-    ]);
-
-    const response = await this.transport.send(2, payload);
-    return !!response
+      throw new Error("Method not implemented in new protocol.");
   }
-
-  async getStatus(): Promise<any> {
-    if (!this.transport) throw new Error('Device not connected');
-    
-    try {
-      // 尝试获取设备版本信息
-      // 发送 1 字节占位符，避免空 Buffer 导致底层库报错
-      const versionResp = await this.transport.send(Actions.CMD_GET_DEVICE_VERSION, Buffer.alloc(1));
-
-      // 解析返回的对象
-      let versionStr = '';
-      let mfpStr = '';
-
-      // 尝试从 Transport 对象中获取 USB 设备信息 (Model & Hardware Version & Serial)
-      let modelStr = 'Hardware Wallet';
-      let hwVersionStr = ''; 
-      let serialStr = ''; // 优先使用 USB 描述符里的 Serial
+  
+  // Helpers
+  
+  private async sendRaw(data: Buffer): Promise<void> {
+      if (!this.endpointOut) throw new Error("Endpoint not initialized");
+      return new Promise((resolve, reject) => {
+          this.endpointOut!.transfer(data, (err) => {
+              if (err) reject(err);
+              else resolve();
+          });
+      });
+  }
+  
+  private async readRaw(length: number, timeout = 5000): Promise<Buffer> {
+      if (!this.endpointIn) throw new Error("Endpoint not initialized");
       
-      try {
-        // @ts-ignore
-        if (this.transport.device) {
-             // @ts-ignore
-             const usbDevice = this.transport.device;
-             
-             // Model
-             if (usbDevice.productName) {
-                 modelStr = usbDevice.productName;
-             }
-             
-             // Hardware Version (从 deviceVersionMajor/Minor)
-             if (usbDevice.deviceVersionMajor !== undefined) {
-                 hwVersionStr = `v${usbDevice.deviceVersionMajor}.${usbDevice.deviceVersionMinor || 0}`;
-             }
-             // 回退：尝试从 bcdDevice 读取 (如果上面的属性不存在)
-             else if (usbDevice.deviceDescriptor && usbDevice.deviceDescriptor.bcdDevice) {
-                 const bcd = usbDevice.deviceDescriptor.bcdDevice;
-                 const major = bcd >> 8;
-                 const minor = (bcd >> 4) & 0x0F;
-                 hwVersionStr = `v${major}.${minor}`;
-             }
-             
-             // Serial Number
-             if (usbDevice.serialNumber) {
-                 serialStr = usbDevice.serialNumber;
-             }
-        }
-      } catch(e) {}
+      return new Promise((resolve, reject) => {
+          // Set timeout
+          this.endpointIn!.timeout = timeout;
+          
+          this.endpointIn!.transfer(length, (err, data) => {
+              if (err) reject(err);
+              else resolve(data as Buffer);
+          });
+      });
+  }
+  
+  private async readEapduResponse(timeout = 10000): Promise<EapduResponse> {
+      // Read first packet (64 bytes for EAPDU)
+      const firstPacket = await this.readRaw(64, timeout);
+      const firstResponse = parseEapduResponse(firstPacket);
       
-      if (typeof versionResp === 'object' && versionResp !== null) {
-        // @ts-ignore
-        if (versionResp.firmwareVersion) versionStr = versionResp.firmwareVersion;
-        // @ts-ignore
-        if (versionResp.walletMFP) mfpStr = versionResp.walletMFP;
+      if (firstResponse.totalPackets <= 1) {
+          return firstResponse;
       }
       
-      // 如果解析失败，回退到 JSON 字符串
-      if (!versionStr && typeof versionResp === 'object') {
-        versionStr = JSON.stringify(versionResp);
+      const allPayloads = [firstResponse.payload];
+      for (let i = 1; i < firstResponse.totalPackets; i++) {
+          const packet = await this.readRaw(64, timeout);
+          const response = parseEapduResponse(packet);
+          allPayloads.push(response.payload);
       }
       
-      return {
-        statusMessage: 'Connected',
-        tlvArray: [
-          { type: 1, value: Buffer.from(modelStr, 'utf-8') },    // Type 1 = Model
-          { type: 4, value: Buffer.from(versionStr, 'utf-8') }, // Type 4 = Firmware Version
-          { type: 3, value: Buffer.from(hwVersionStr, 'utf-8') },// Type 3 = Hardware Version
-          { type: 2, value: Buffer.from(serialStr || mfpStr, 'utf-8') } // Type 2 = Serial Number
-        ],
-        rawVersion: versionStr
-      };
-    } catch (e) {
-      console.warn('Failed to get device version:', e);
-      // 降级返回基础信息
-      return {
-        statusMessage: 'Connected (Basic Mode)',
-        tlvArray: [
-          { type: 1, value: Buffer.from(this._info.product || 'Unknown', 'utf-8') },
-          { type: 2, value: Buffer.from(this._info.serialNumber || 'Unknown', 'utf-8') }
-        ]
-      };
-    }
+      const combinedPayload = Buffer.concat(allPayloads);
+      firstResponse.payload = combinedPayload;
+      return firstResponse;
   }
-
-  getInfo(): IDeviceInfo {
-    return this._info;
+  
+  private async readProtocolResponse(timeout = 5000): Promise<any> {
+      // Protocol packet size can be large, read max
+      const data = await this.readRaw(PROTOCOL.MAX_PACKET_SIZE, timeout);
+      return parseResponse(data);
   }
 }

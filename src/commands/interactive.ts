@@ -223,31 +223,27 @@ async function handleGetStatus() {
   const spinner = ora('Getting status...').start();
   try {
     const device = await UsbManager.findDevice();
-    await device.connect();
+    // device is already connected by UsbManager.findDevice()
+    // await device.connect(); 
+    
     const status = await device.getStatus();
     
     spinner.succeed('Status retrieved');
     console.log(chalk.green('\n✓ Device Information:'));
     
-    if (status.tlvArray) {
-       // Manual render logic similar to status command
-       const findValue = (type: number) => {
-         const item = status.tlvArray.find((t: any) => t.type === type);
-         return item ? item.value.toString('utf-8').replace(/\0/g, '') : '';
-       };
-       
-       console.log(chalk.gray(`  Model: ${chalk.white(findValue(1) || 'Unknown')}`));
-       console.log(chalk.gray(`  Firmware: ${chalk.white(findValue(4) || 'Unknown')}`));
-       console.log(chalk.gray(`  Serial: ${chalk.white(findValue(2) || 'Unknown')}`));
-       console.log(chalk.gray(`  Hardware: ${chalk.white(findValue(3) || 'Unknown')}`));
+    if (status) {
+       console.log(chalk.gray(`  Model: ${chalk.white(status.model || 'Unknown')}`));
+       console.log(chalk.gray(`  Firmware: ${chalk.white(status.firmwareVersion || 'Unknown')}`));
+       console.log(chalk.gray(`  Serial: ${chalk.white(status.serialNumber || 'Unknown')}`));
+       console.log(chalk.gray(`  Hardware: ${chalk.white(status.hardwareVersion || 'Unknown')}`));
     }
     
     await device.disconnect();
     process.exit(0); // Exit after success
   } catch (error: any) {
     spinner.fail('Failed to get status');
-    // console.error(error instanceof Error ? error.message : JSON.stringify(error));
-    console.log(error);
+    console.error(error instanceof Error ? error.message : JSON.stringify(error));
+    if (process.env.DEBUG) console.error(error);
     process.exit(1);
   }
 }
