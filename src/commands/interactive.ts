@@ -72,18 +72,26 @@ async function handleGenerateKeyPair() {
   const spinner = ora(`Generating key pair in ${outputDir}...`).start();
 
   try {
+    // Ensure directory exists
+    if (!fs.existsSync(resolvedPath)) {
+        fs.mkdirSync(resolvedPath, { recursive: true });
+    }
+
     const keyPair = CryptoManager.generateKeyPair();
     const paths = CryptoManager.saveKeys(keyPair, resolvedPath);
     
     spinner.succeed(chalk.green('Key pair generated successfully!'));
-    console.log(chalk.gray(`\n  Public Key:  ${paths.pubPath}`));
-    console.log(chalk.gray(`  Private Key: ${paths.privPath}\n`));
+    console.log('');
+    console.log(`  ${chalk.cyan('Private Key:')} ${paths.privPath}`);
+    console.log(`  ${chalk.cyan('Public Key:')}  ${paths.pubPath}`);
+    console.log('');
+    console.log(chalk.yellow('  ⚠️  Keep your private key safe!'));
     
-    process.exit(0); // Exit after success
+    process.exit(0); // REMOVED: Return to menu
   } catch (error: any) {
     spinner.fail(chalk.red('Failed to generate key pair'));
     console.error(error.message);
-    process.exit(1);
+    process.exit(1); // REMOVED
   }
 }
 
@@ -167,18 +175,18 @@ async function handleSendK1PublicKey() {
       rawPubKey = der.subarray(der.length - 65);
       
       // Use PEM content for signing
-      rawPrivKey = privKeyContent;
-      
-      console.log(chalk.gray(`\nLoaded keys from ${dirPath}`));
-      console.log(chalk.gray(`Public Key: ${rawPubKey.toString('hex')}`));
-    } catch (e: any) {
-      console.error(chalk.red('Failed to parse keys:'), e.message);
-      return;
-    }
+    rawPrivKey = privKeyContent;
+    
+    console.log(chalk.gray(`\nLoaded keys from ${dirPath}`));
+    console.log(chalk.gray(`Public Key: ${rawPubKey.toString('hex')}`));
+  } catch (e: any) {
+    console.error(chalk.red('Failed to parse keys:'), e.message);
+    return;
+  }
   }
 
   console.log(chalk.gray(`\nGenerating signature...`));
-  
+
   let signature: Buffer;
   try {
     if (Buffer.isBuffer(rawPrivKey)) {
@@ -197,25 +205,48 @@ async function handleSendK1PublicKey() {
   const spinner = ora('Connecting to device...').start();
   try {
     const device = await UsbManager.findDevice();
-    await device.connect();
+    // device is already connected
     
-    // Fingerprint check
-    const fingerprint = createHash('sha256').update(rawPubKey).digest('hex');
-    spinner.stop();
-    
-    console.log(chalk.cyan('\n  Public Key Fingerprint (SHA256):'));
-    console.log(chalk.white(`  ${fingerprint}\n`));
-    console.log(chalk.yellow('  👉 Please COMPARE with device screen and SWIPE to confirm.'));
+    const info = device.getInfo();
+    spinner.succeed(chalk.green(`Connected to ${info.product} (${info.manufacturer})`));
+    console.log(chalk.gray(`  Serial: ${info.serialNumber}`));
+    console.log('');
 
-    spinner.start('Waiting for confirmation...');
-    await device.registerPublicKey(rawPubKey, signature);
-    spinner.succeed(chalk.green('Public key registered successfully!'));
+    // Calculate fingerprint for verification
+    const fingerprint = createHash('sha256').update(rawPubKey).digest('hex');
+
+    spinner.start('Waiting for user confirmation on device...');
     
-    process.exit(0); // Exit after success
+    console.log('');
+    console.log(chalk.cyan('  Public Key Fingerprint (SHA256):'));
+    console.log(chalk.white(`  ${fingerprint}`));
+    console.log('');
+    console.log(chalk.yellow('  👉 Please COMPARE the fingerprint above with the one shown on the device.'));
+    console.log(chalk.yellow('  👉 If they match, SWIPE on the device to confirm registration.\n'));
+
+    await device.registerPublicKey(rawPubKey, signature);
+    
+    spinner.succeed(chalk.green('Public key registered successfully!'));
+
+    console.log('');
+    console.log(chalk.cyan('  Success:'));
+    console.log(chalk.white('  The public key has been securely stored on the ForgeBox device.'));
+    console.log(chalk.white('  You can now sign your custom firmware using the CLI.'));
+    console.log('');
+
+    await device.disconnect();
+    process.exit(0); // REMOVED
   } catch (error: any) {
-    spinner.fail(chalk.red('Registration failed'));
-    console.error(chalk.red('Error:'), error.message);
-    process.exit(1);
+    const msg = error instanceof Error ? error.message : JSON.stringify(error);
+    
+    if (msg.toLowerCase().includes('cancel')) {
+        spinner.warn(chalk.yellow('Operation cancelled by user.'));
+    } else if (msg.toLowerCase().includes('disconnected') || msg.toLowerCase().includes('not found')) {
+        spinner.fail(chalk.red('Connection lost or device not found.'));
+    } else {
+        spinner.fail(chalk.red(`Operation failed: ${msg}`));
+    }
+    process.exit(1); // REMOVED
   }
 }
 
@@ -224,7 +255,6 @@ async function handleGetStatus() {
   try {
     const device = await UsbManager.findDevice();
     // device is already connected by UsbManager.findDevice()
-    // await device.connect(); 
     
     const status = await device.getStatus();
     
@@ -236,21 +266,24 @@ async function handleGetStatus() {
        console.log(chalk.gray(`  Firmware: ${chalk.white(status.firmwareVersion || 'Unknown')}`));
        console.log(chalk.gray(`  Serial: ${chalk.white(status.serialNumber || 'Unknown')}`));
        console.log(chalk.gray(`  Hardware: ${chalk.white(status.hardwareVersion || 'Unknown')}`));
+    } else {
+       console.log(chalk.yellow('  No device information available'));
     }
     
     await device.disconnect();
-    process.exit(0); // Exit after success
+    process.exit(0); // REMOVED
   } catch (error: any) {
     spinner.fail('Failed to get status');
     console.error(error instanceof Error ? error.message : JSON.stringify(error));
     if (process.env.DEBUG) console.error(error);
-    process.exit(1);
+    process.exit(1); // REMOVED
   }
 }
 
 async function handleListDevices() {
   try {
     const devices = await UsbManager.listDevices();
+    console.log(chalk.blue('Scanning for USB devices...'));
     if (devices.length === 0) {
       console.log(chalk.yellow('No devices found.'));
     } else {
@@ -280,9 +313,9 @@ async function handleListDevices() {
       });
       console.log('');
     }
-    process.exit(0); // Exit after success
+    process.exit(0); // REMOVED
   } catch (e: any) {
     console.error('Error:', e.message);
-    process.exit(1);
+    process.exit(1); // REMOVED
   }
 }

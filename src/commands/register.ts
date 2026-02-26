@@ -93,9 +93,10 @@ export function registerRegisterCommand(program: Command) {
       try {
         // 2. 连接设备
         const device = await UsbManager.findDevice();
-        await device.connect();
+        // device is already connected
+        
         const info = device.getInfo();
-        console.log(device,'devicedevice');
+        // console.log(device,'devicedevice');
         spinner.succeed(chalk.green(`Connected to ${info.product} (${info.manufacturer})`));
         console.log(chalk.gray(`  Serial: ${info.serialNumber}`));
         console.log('');

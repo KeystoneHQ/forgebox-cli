@@ -12,8 +12,8 @@ export function registerStatusCommand(program: Command) {
       
       try {
         const device = await UsbManager.findDevice();
-        await device.connect();
-        spinner.succeed('Device connected');
+        // device is already connected by UsbManager.findDevice()
+        // await device.connect(); 
         
         spinner.start('Getting status...');
         const status = await device.getStatus();
@@ -31,10 +31,11 @@ export function registerStatusCommand(program: Command) {
         }
         
         await device.disconnect();
-        
+        process.exit(0);
       } catch (error: any) {
-        spinner.fail(chalk.red('Failed to get status'));
-        console.error(chalk.red('\n✗ Error:'), error.message);
+        spinner.fail('Failed to get status');
+        console.error(error instanceof Error ? error.message : JSON.stringify(error));
+        if (process.env.DEBUG) console.error(error);
         process.exit(1);
       }
     });
