@@ -246,7 +246,8 @@ async function handleGetStatus() {
     process.exit(0); // Exit after success
   } catch (error: any) {
     spinner.fail('Failed to get status');
-    console.error(error.message);
+    // console.error(error instanceof Error ? error.message : JSON.stringify(error));
+    console.log(error);
     process.exit(1);
   }
 }
