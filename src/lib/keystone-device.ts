@@ -1,5 +1,5 @@
-// import { TransportNodeUSB } from '@keystonehq/hw-transport-nodeusb';
-import { TransportWebUSB } from '@keystonehq/hw-transport-webusb';
+import { TransportNodeUSB } from '@keystonehq/hw-transport-nodeusb';
+// import { TransportWebUSB } from '@keystonehq/hw-transport-webusb';
 import { getDeviceList, WebUSBDevice } from 'usb';
 import { IUsbDevice, IDeviceInfo } from './usb-interface';
 
@@ -25,11 +25,13 @@ export class KeystoneDevice implements IUsbDevice {
       // 显式查找并过滤设备 (VID: 0x1209, PID: 0x3001)
       const devices = getDeviceList();
       let targetDevice: WebUSBDevice | null = null;
+      let rawDevice: any = null;
 
       for (const device of devices) {
         const webusbDevice = await WebUSBDevice.createInstance(device);
         if (webusbDevice.vendorId === VENDOR_ID && webusbDevice.productId === PRODUCT_ID) {
           targetDevice = webusbDevice;
+          rawDevice = device;
           break;
         }
       }
@@ -48,11 +50,34 @@ export class KeystoneDevice implements IUsbDevice {
           // }
       }
 
+      // 尝试在非 Windows 平台剥离内核驱动
+      if (rawDevice && process.platform !== 'win32') {
+        try {
+          rawDevice.open();
+          // 假设使用接口 0 (大多数 HID/WebUSB 设备的主接口)
+          const iface = rawDevice.interface(0);
+          if (iface.isKernelDriverActive()) {
+            // console.log('Detaching kernel driver...');
+            iface.detachKernelDriver();
+          }
+          // 保持设备打开状态可能会影响后续 Transport 的 open()，
+          // 但通常 libusb 允许同一进程多次 open。
+          // 如果 Transport 报错，可以尝试在这里 rawDevice.close()。
+          // 但关闭后内核驱动可能会自动重新挂载，导致 detach 失效。
+          // 目前先尝试关闭，观察效果。
+          rawDevice.close();
+        } catch (e) {
+          // 忽略错误 (如设备忙、权限不足等)，继续后续流程
+          // console.warn('Kernel driver detach attempt failed (non-fatal):', e);
+          try { rawDevice.close(); } catch {}
+        }
+      }
+
       // 使用找到的设备直接连接
       // 由于项目依赖结构导致 usb 库可能存在多份实例，类型系统认为是不同的类
       // 这里使用 as any 绕过类型检查，因为运行时对象是兼容的
-      // this.transport = new TransportNodeUSB(targetDevice as any, config);
-      this.transport = new TransportWebUSB(targetDevice as any, config);
+      this.transport = new TransportNodeUSB(targetDevice as any, config);
+      // this.transport = new TransportWebUSB(targetDevice as any, config);
       await this.transport.open();
     } catch (error) {
       // 抛出错误以便上层捕获并降级到 Mock
