@@ -139,11 +139,12 @@ export class KeystoneDevice implements IUsbDevice {
 
   async registerPublicKey(publicKey: Buffer, signature: Buffer): Promise<boolean> {
     if (!this.device || !this.endpointOut) throw new Error('Device not connected');
-
-    // Combine payload: publicKey + signature
-    // Assuming firmware expects raw data without length prefix for EAPDU
-    const data = Buffer.concat([publicKey, signature]);
     
+    // Combine payload: [1 byte Length] + [Public Key] + [Signature]
+    const lenBuf = Buffer.alloc(1);
+    lenBuf.writeUInt8(publicKey.length);
+    
+    const data = Buffer.concat([lenBuf, publicKey, signature]);
     const packets = buildEapduPackets(CmdType.GET_DEVICE_USB_PUBKEY, data);
     
     console.log(`Sending ${packets.length} EAPDU packets...`);

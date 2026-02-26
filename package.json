@@ -1,12 +1,19 @@
 {
   "name": "forgebox_cli",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/index.js",
   "bin": {
     "forgebox": "./bin/forgebox"
   },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "README_ZH.md"
+  ],
   "scripts": {
-    "build": "tsc && npm link",
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
     "build:firmware": "(cd ../keystone3-firmware && python3 build.py -e production) && mkdir -p my-firmware && cp ../keystone3-firmware/build/mh1903.bin ./my-firmware/mh1903_full.bin",
     "start": "node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
