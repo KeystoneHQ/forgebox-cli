@@ -8,6 +8,7 @@ ForgeBox Hardware Wallet Management Tool. This tool is used for generating secur
 - **status**: Get detailed device information (firmware version, serial number, etc.).
 - **keygen**: Generate secp256k1 standard public/private key pairs (PEM format).
 - **register**: Write the public key to the ForgeBox hardware device, supporting user Swipe-to-Confirm.
+- **build:firmware**: Compile firmware source code.
 - **sign**: Perform OTA signature packaging for firmware.
 - **interactive** (alias `i`): Launch an interactive menu mode supporting all common operations.
 

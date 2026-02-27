@@ -115,8 +115,15 @@ export function registerRegisterCommand(program: Command) {
         console.log(chalk.yellow('  👉 If they match, SWIPE on the device to confirm registration.\n'));
 
         // 4. 发送指令并等待 (Send RAW key + Signature)
-        await device.registerPublicKey(rawPubKey, signature);
-        
+        const success = await device.registerPublicKey(rawPubKey, signature);
+
+        if (!success) {
+             // throw new Error('Device returned failure status. Please check the device screen and try again.');
+            console.log(chalk.red(' \n Failed: Device returned failure status. Please check the device screen and try again.'));
+            await device.disconnect(); 
+            process.exit(0);
+        }
+
         spinner.succeed(chalk.green('Public key registered successfully!'));
 
         // 5. 成功后的引导
@@ -127,28 +134,10 @@ export function registerRegisterCommand(program: Command) {
         console.log('');
         console.log(chalk.cyan('  Next Step:'));
         console.log(chalk.white('  $ ') + chalk.yellow(`forgebox sign --file <firmware.bin> --key <private.pem>`));
-
+        process.exit(0);
       } catch (error: any) {
-        const msg = error.message || '';
-        
-        if (msg.toLowerCase().includes('cancel')) {
-            // Case: 用户取消
-            spinner.warn(chalk.yellow('Operation cancelled by user.'));
-            console.log(chalk.gray('  Please run the command again, and follow the prompt on the device screen to "Swipe to register".'));
-        } else if (msg.toLowerCase().includes('disconnected') || msg.toLowerCase().includes('not found')) {
-            // Case: USB 意外断联
-            spinner.fail(chalk.red('Connection lost or device not found.'));
-            console.log(chalk.gray('  Please check your USB cable connection and try again.'));
-        } else if (msg.toLowerCase().includes('full') || msg.toLowerCase().includes('write failed')) {
-            // Case: 硬件故障 (如 16 个 slot 满或写入失败)
-            spinner.fail(chalk.red('Hardware storage error.'));
-            console.log(chalk.gray('  Failed to write public key. Please refer to the README for troubleshooting or contact support.'));
-        } else {
-            // Case: 签名验证失败/文件损坏/其他
-            spinner.fail(chalk.red(`Operation failed: ${msg}`));
-            // console.log(chalk.gray('  Please check if the public key file is valid or regenerate the key pair.'));
-            console.log(chalk.gray('  Please check if the device is connected and try again.'));
-        }
+        console.log(chalk.red('Operation failed:'), error);
+        process.exit(1); // REMOVED
       } finally {
         // 断开连接
         // if (device) await device.disconnect(); 

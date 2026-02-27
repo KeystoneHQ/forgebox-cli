@@ -224,28 +224,30 @@ async function handleSendK1PublicKey() {
     console.log(chalk.yellow('  👉 Please COMPARE the fingerprint above with the one shown on the device.'));
     console.log(chalk.yellow('  👉 If they match, SWIPE on the device to confirm registration.\n'));
 
-    await device.registerPublicKey(rawPubKey, signature);
+    const success = await device.registerPublicKey(rawPubKey, signature);
     
+    if (!success) {
+      // throw new Error('Device returned failure status. Please check the device screen and try again.');
+      console.log(chalk.red(' \n Failed: Device returned failure status. Please check the device screen and try again.'));
+      await device.disconnect();
+      process.exit(0); // REMOVED
+    }
+
     spinner.succeed(chalk.green('Public key registered successfully!'));
 
+    // 5. 成功后的引导
     console.log('');
     console.log(chalk.cyan('  Success:'));
     console.log(chalk.white('  The public key has been securely stored on the ForgeBox device.'));
     console.log(chalk.white('  You can now sign your custom firmware using the CLI.'));
     console.log('');
+    console.log(chalk.cyan('  Next Step:'));
+    console.log(chalk.white('  $ ') + chalk.yellow(`forgebox sign --file <firmware.bin> --key <private.pem>`));
 
     await device.disconnect();
     process.exit(0); // REMOVED
   } catch (error: any) {
-    const msg = error instanceof Error ? error.message : JSON.stringify(error);
-    
-    if (msg.toLowerCase().includes('cancel')) {
-        spinner.warn(chalk.yellow('Operation cancelled by user.'));
-    } else if (msg.toLowerCase().includes('disconnected') || msg.toLowerCase().includes('not found')) {
-        spinner.fail(chalk.red('Connection lost or device not found.'));
-    } else {
-        spinner.fail(chalk.red(`Operation failed: ${msg}`));
-    }
+    console.log(chalk.red('Operation failed:'), error);
     process.exit(1); // REMOVED
   }
 }

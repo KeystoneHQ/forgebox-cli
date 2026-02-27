@@ -158,18 +158,56 @@ export class KeystoneDevice implements IUsbDevice {
     try {
         // 1. Read immediate ACK
         const ack = await this.readEapduResponse();
-        console.log('ACK Response:', ack.statusMessage);
-        
-        if (!ack.success) {
+        // console.log('ACK Response:', ack.statusMessage);
+        // Special handling: sometimes device returns text "verify pubkey success" 
+        // which causes status code parsing to fail (reads 've' as status 0x7665)
+        const payloadStr = ack.payload.toString();
+        const statusAsText = Buffer.alloc(2);
+        statusAsText.writeUInt16BE(ack.status);
+        const fullResponse = statusAsText.toString() + payloadStr;
+
+        if (!fullResponse.includes('success')) {
             return false;
         }
 
-        // 2. Wait for user swipe confirmation (Long timeout)
-        console.log('Waiting for user confirmation on device...');
+        // 2. Drain any extra ACKs (if device sends ACK per packet)
+        // We use a short timeout loop to consume any buffered packets
+        try {
+            while (true) {
+                // 100ms timeout to check for buffered data
+                const extraAck = await this.readEapduResponse(100);
+                if (!extraAck.success) {
+                    // Check if extra ACK is also a success message
+                    const extraPayload = extraAck.payload.toString();
+                    const extraStatusBuf = Buffer.alloc(2);
+                    extraStatusBuf.writeUInt16BE(extraAck.status);
+                    const extraFull = extraStatusBuf.toString() + extraPayload;
+                    if (!extraFull.includes('success')) return false;
+                }
+            }
+        } catch (e) {
+            // Timeout expected when buffer is empty
+            // console.log('ACK buffer drained');
+        }
+
+        // 3. Wait for user swipe confirmation (Long timeout)
         const response = await this.readEapduResponse(60000);
-        console.log('Final Response:', response.statusMessage);
         
-        return response.success;
+        // Parse response payload as text for debugging/logging
+        const responsePayloadStr = response.payload.toString();
+        const responseStatusBuf = Buffer.alloc(2);
+        responseStatusBuf.writeUInt16BE(response.status);
+        const fullResponseMsg = responseStatusBuf.toString() + responsePayloadStr;
+        
+        // console.log('\n Final Response Message:', fullResponseMsg.replace(/\0/g, '').trim()); // Clean up null bytes
+        // console.log('\n Final Response Status:', response.statusMessage);
+        
+        // Check for success keywords in text response if status code indicates failure
+        if (fullResponseMsg.includes('success')) {
+            return true;
+        }
+        
+        return false;
     } catch (e: any) {
         console.error('registerPublicKey failed:', e.message);
         return false;

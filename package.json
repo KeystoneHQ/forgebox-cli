@@ -14,7 +14,6 @@
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build",
-    "build:firmware": "(cd ../keystone3-firmware && python3 build.py -e production) && mkdir -p my-firmware && cp ../keystone3-firmware/build/mh1903.bin ./my-firmware/mh1903_full.bin",
     "start": "node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
