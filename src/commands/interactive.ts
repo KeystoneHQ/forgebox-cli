@@ -181,7 +181,7 @@ async function handleSendK1PublicKey() {
     console.log(chalk.gray(`Public Key: ${rawPubKey.toString('hex')}`));
   } catch (e: any) {
     console.error(chalk.red('Failed to parse keys:'), e.message);
-    return;
+    process.exit(1); // REMOVED
   }
   }
 

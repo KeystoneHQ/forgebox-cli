@@ -30,7 +30,6 @@ Examples:
         // 生成密钥
         const keys = CryptoManager.generateKeyPair();
         
-        console.log(keys, 'keys')
 
         // 保存文件
         const { pubPath, privPath } = CryptoManager.saveKeys(keys, outputDir);
