@@ -99,27 +99,53 @@ forgebox register --pubkey ./my-keys/pubkey.pem --key ./my-keys/private.pem
 4. **用户操作**：在硬件设备上核对指纹无误后，滑动屏幕以确认写入。
 5. 设备验证签名有效性，确认后保存公钥。
 
-### 5. 固件签名 (Sign)
-将固件文件处理为可用于升级的 OTA 签名包。
+### 5. 固件打包 (Build Firmware)
 
-#### 1. 固件打包（Build Firmware）
-在 `ForgeBox_cli` 目录下执行：
+使用 CLI 工具编译固件源码。
+
+**前提条件：**
+1. 本地环境已安装 `python3`。
+2. 已安装固件编译所需的交叉编译工具链（如 `arm-none-eabi-gcc` 等，具体参考固件仓库文档）。
 
 ```bash
-npm run build:firmware
+# 1. 克隆固件源码
+git clone https://github.com/keystonehq/keystone3-firmware.git
+
+# 2. 执行构建命令
+forgebox build:firmware ./keystone3-firmware
 ```
 
-这将在 `ForgeBox_cli/my-firmware` 目录下生成 `mh1903_full.bin` 文件，这是完整的 ForgeBox 固件，接下来我们将对这个固件进行签名。
+**参数说明：**
+- `[source]`: 固件源码目录路径（默认：当前目录）。
+- `-o, --out <目录>`: 指定构建产物的输出目录（默认：`./my-firmware`）。
 
-**注意：** 前提是需要将keystone3-firmware工程和ForgeBox_cli工程放在同一个目录下，并且keystone3-firmware工程环境已成功配置，并且已经成功编译。否则，需要先编译keystone3-firmware工程（参考keystone3-firmware工程的README.md）。
+**示例：**
+```bash
+forgebox build:firmware ./keystone3-firmware -o ./my-firmware
+```
+该命令会自动调用源码目录下的 `build.py` 脚本执行编译，并将生成的 `mh1903_full.bin` 复制到指定输出目录。
 
-#### 2. 固件签名（Sign Firmware）
+**备选方案：手动构建**
+
+如果你更习惯在固件项目内操作，也可以直接在 `keystone3-firmware` 目录下运行构建脚本：
+
+```bash
+cd keystone3-firmware
+python3 build.py -e production
+```
+
+编译成功后，生成的固件文件位于 `build/mh1903_full.bin`。你需要将其复制出来以便于识别，然后使用 `forgebox sign` 进行签名。
+
+### 6. 固件签名 (Sign)
+
+将固件文件处理为可用于升级的 OTA 签名包。
+
 ```bash
 forgebox sign --s <源固件文件> --d <签名后文件> --key <私钥文件或hex>
 ```
 
 **参数说明：**
-- `--s`: 待签名固件文件路径
+- `--s`: 待签名固件文件路径（例如上一步生成的 `mh1903_full.bin`）
 - `--d`: 输出签名后的 OTA 文件路径
 - `--key`: 私钥文件路径（PEM）或 64 位私钥 hex 字符串
 
@@ -131,7 +157,6 @@ forgebox sign --s ./my-firmware/mh1903_full.bin --d ./my-firmware/forgebox.bin -
 # 使用私钥 hex 进行签名
 forgebox sign --s ./my-firmware/mh1903_full.bin --d ./my-firmware/forgebox.bin --key your_private_key_hex
 ```
-其中`./my-firmware/mh1903_full.bin`是完整的ForgeBox固件文件路径，路径可自定义。
 
 **执行逻辑：**
 1. CLI 按 OTA 格式对固件进行压缩分块处理。
@@ -139,7 +164,7 @@ forgebox sign --s ./my-firmware/mh1903_full.bin --d ./my-firmware/forgebox.bin -
 3. 使用私钥对哈希进行签名并写入头部。
 4. 输出可直接用于升级的 OTA 文件。
 
-### 6. 交互模式 (Interactive)
+### 7. 交互模式 (Interactive)
 
 启动交互式菜单，方便地执行常用操作。
 

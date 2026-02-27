@@ -156,8 +156,19 @@ export class KeystoneDevice implements IUsbDevice {
     
     // Read response
     try {
-        const response = await this.readEapduResponse();
-        console.log('registerPublicKey response:', response.statusMessage);
+        // 1. Read immediate ACK
+        const ack = await this.readEapduResponse();
+        console.log('ACK Response:', ack.statusMessage);
+        
+        if (!ack.success) {
+            return false;
+        }
+
+        // 2. Wait for user swipe confirmation (Long timeout)
+        console.log('Waiting for user confirmation on device...');
+        const response = await this.readEapduResponse(60000);
+        console.log('Final Response:', response.statusMessage);
+        
         return response.success;
     } catch (e: any) {
         console.error('registerPublicKey failed:', e.message);

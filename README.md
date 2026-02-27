@@ -1,6 +1,6 @@
 # ForgeBox CLI
 
-ForgeBox Hardware Wallet Management Tool. This tool is used for generating secure credentials and managing hardware device public key registration.
+ForgeBox Hardware Wallet Management Tool. This tool is used for generating secure credentials, managing hardware device public key registration, and executing firmware signing.
 
 ## Features
 
@@ -99,27 +99,53 @@ forgebox register --pubkey ./my-keys/pubkey.pem --key ./my-keys/private.pem
 4. **User Action**: After verifying the fingerprint on the hardware device, swipe the screen to confirm writing.
 5. The device validates the signature and saves the public key upon confirmation.
 
-### 5. Firmware Signing (Sign)
-Process the firmware file into an OTA signature package ready for upgrade.
+### 5. Build Firmware (Build Firmware)
 
-#### 1. Build Firmware
-Execute the following in the `ForgeBox_cli` directory:
+Use the CLI tool to compile firmware source code.
+
+**Prerequisites:**
+1. Local environment has `python3` installed.
+2. Cross-compilation toolchain required for firmware compilation is installed (e.g., `arm-none-eabi-gcc`, refer to the firmware repository documentation for details).
 
 ```bash
-npm run build:firmware
+# 1. Clone firmware source code
+git clone https://github.com/keystonehq/keystone3-firmware.git
+
+# 2. Execute build command
+forgebox build:firmware ./keystone3-firmware
 ```
 
-This will generate the `mh1903_full.bin` file in the `ForgeBox_cli/my-firmware` directory. This is the complete ForgeBox firmware. Next, we will sign this firmware.
+**Parameters:**
+- `[source]`: Firmware source code directory path (default: current directory).
+- `-o, --out <directory>`: Output directory for build artifacts (default: `./my-firmware`).
 
-**Note:** Prerequisite: The `keystone3-firmware` project and `ForgeBox_cli` project must be in the same parent directory, and the `keystone3-firmware` project must be successfully configured and compiled. Otherwise, compile the `keystone3-firmware` project first (refer to the README.md of the `keystone3-firmware` project).
+**Example:**
+```bash
+forgebox build:firmware ./keystone3-firmware -o ./my-firmware
+```
+This command automatically invokes the `build.py` script in the source directory to execute compilation and copies the generated `mh1903_full.bin` to the specified output directory.
 
-#### 2. Sign Firmware
+**Alternative: Manual Build**
+
+If you prefer to operate within the firmware project, you can also run the build script directly in the `keystone3-firmware` directory:
+
+```bash
+cd keystone3-firmware
+python3 build.py -e production
+```
+
+After successful compilation, the generated firmware file is located at `build/mh1903_full.bin`. You need to copy it out for easier identification and then use `forgebox sign` to sign it.
+
+### 6. Firmware Signing (Sign)
+
+Process the firmware file into an OTA signature package ready for upgrade.
+
 ```bash
 forgebox sign --s <source_firmware_file> --d <signed_file> --key <private_key_file_or_hex>
 ```
 
 **Parameters:**
-- `--s`: Path to the source firmware file to be signed
+- `--s`: Path to the source firmware file to be signed (e.g., `mh1903_full.bin` generated in the previous step)
 - `--d`: Path for the output signed OTA file
 - `--key`: Path to the private key file (PEM) or a 64-character private key hex string
 
@@ -131,7 +157,6 @@ forgebox sign --s ./my-firmware/mh1903_full.bin --d ./my-firmware/forgebox.bin -
 # Sign using a private key hex string
 forgebox sign --s ./my-firmware/mh1903_full.bin --d ./my-firmware/forgebox.bin --key your_private_key_hex
 ```
-Where `./my-firmware/mh1903_full.bin` is the path to the complete ForgeBox firmware file, which can be customized.
 
 **Execution Logic:**
 1. CLI compresses and chunks the firmware according to the OTA format.
@@ -139,7 +164,7 @@ Where `./my-firmware/mh1903_full.bin` is the path to the complete ForgeBox firmw
 3. Signs the hash using the private key and writes it to the header.
 4. Outputs an OTA file ready for direct upgrade.
 
-### 6. Interactive Mode (Interactive)
+### 7. Interactive Mode (Interactive)
 
 Launch the interactive menu to easily perform common operations.
 

@@ -7,6 +7,7 @@ import { registerSignCommand } from './commands/sign';
 import { registerStatusCommand } from './commands/status';
 import { registerListDeviceCommand } from './commands/list-device';
 import { registerInteractiveCommand } from './commands/interactive';
+import { registerBuildCommand } from './commands/build';
 
 // 读取 package.json 获取版本号
 // 注意：在 TypeScript 中直接 import json 需要配置 resolveJsonModule
@@ -25,7 +26,7 @@ registerStatusCommand(program);
 registerKeygenCommand(program);
 registerRegisterCommand(program);
 registerSignCommand(program);
-
+registerBuildCommand(program);
 registerInteractiveCommand(program);
 
 // 错误处理
