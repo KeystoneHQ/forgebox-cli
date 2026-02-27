@@ -110,10 +110,10 @@ forgebox register --pubkey ./my-keys/pubkey.pem --key ./my-keys/private.pem
 
 ```bash
 # 1. 克隆固件源码
-git clone https://github.com/keystonehq/keystone3-firmware.git
+git clone https://github.com/keystonehq/forgebox-firmware.git
 
 # 2. 执行构建命令
-forgebox build:firmware ./keystone3-firmware
+forgebox build:firmware ./forgebox-firmware
 ```
 
 **参数说明：**
@@ -122,16 +122,16 @@ forgebox build:firmware ./keystone3-firmware
 
 **示例：**
 ```bash
-forgebox build:firmware ./keystone3-firmware -o ./my-firmware
+forgebox build:firmware ./forgebox-firmware -o ./my-firmware
 ```
 该命令会自动调用源码目录下的 `build.py` 脚本执行编译，并将生成的 `mh1903_full.bin` 复制到指定输出目录。
 
 **备选方案：手动构建**
 
-如果你更习惯在固件项目内操作，也可以直接在 `keystone3-firmware` 目录下运行构建脚本：
+如果你更习惯在固件项目内操作，也可以直接在 `forgebox-firmware` 目录下运行构建脚本：
 
 ```bash
-cd keystone3-firmware
+cd forgebox-firmware
 python3 build.py -e production
 ```
 

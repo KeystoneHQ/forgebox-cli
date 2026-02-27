@@ -110,10 +110,10 @@ Use the CLI tool to compile firmware source code.
 
 ```bash
 # 1. Clone firmware source code
-git clone https://github.com/keystonehq/keystone3-firmware.git
+git clone https://github.com/keystonehq/forgebox-firmware.git
 
 # 2. Execute build command
-forgebox build:firmware ./keystone3-firmware
+forgebox build:firmware ./forgebox-firmware
 ```
 
 **Parameters:**
@@ -122,16 +122,16 @@ forgebox build:firmware ./keystone3-firmware
 
 **Example:**
 ```bash
-forgebox build:firmware ./keystone3-firmware -o ./my-firmware
+forgebox build:firmware ./forgebox-firmware -o ./my-firmware
 ```
 This command automatically invokes the `build.py` script in the source directory to execute compilation and copies the generated `mh1903_full.bin` to the specified output directory.
 
 **Alternative: Manual Build**
 
-If you prefer to operate within the firmware project, you can also run the build script directly in the `keystone3-firmware` directory:
+If you prefer to operate within the firmware project, you can also run the build script directly in the `forgebox-firmware` directory:
 
 ```bash
-cd keystone3-firmware
+cd forgebox-firmware
 python3 build.py -e production
 ```
 
