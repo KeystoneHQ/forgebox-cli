@@ -13,6 +13,7 @@ import {
   PROTOCOL,
   EapduResponse
 } from './usb-protocol';
+import chalk from 'chalk';
 
 const VENDOR_ID = 0x1209;
 const PRODUCT_ID = 0x3001;
@@ -167,7 +168,9 @@ export class KeystoneDevice implements IUsbDevice {
         const fullResponse = statusAsText.toString() + payloadStr;
 
         if (!fullResponse.includes('success')) {
-            return false;
+          console.log(chalk.red(' \n Failed: Please check if the public key file is corrupted or regenerate the key pair.'));
+          await this.disconnect();
+          process.exit(0); // REMOVED
         }
 
         // 2. Drain any extra ACKs (if device sends ACK per packet)
