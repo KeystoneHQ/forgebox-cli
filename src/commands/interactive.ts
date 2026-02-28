@@ -29,7 +29,7 @@ async function showMainMenu() {
         'List Devices',
         'Get Device Status',
         'Generate Key Pair',
-        'Send K1 Public Key',
+        'Register Public Key',
         'Exit'
       ]
     }
@@ -45,8 +45,8 @@ async function showMainMenu() {
     case 'Generate Key Pair':
       await handleGenerateKeyPair();
       break;
-    case 'Send K1 Public Key':
-      await handleSendK1PublicKey();
+    case 'Register Public Key':
+      await handleRegisterPublicKey();
       break;
     case 'Exit':
       console.log('Bye!');
@@ -95,7 +95,7 @@ async function handleGenerateKeyPair() {
   }
 }
 
-async function handleSendK1PublicKey() {
+async function handleRegisterPublicKey() {
   const { inputType } = await inquirer.prompt([
     {
       type: 'list',
