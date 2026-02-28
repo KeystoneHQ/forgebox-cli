@@ -12,7 +12,7 @@ export function registerBuildCommand(program: Command) {
     .option('-o, --out <directory>', 'Output directory for built firmware', './my-firmware')
     .addHelpText('after', `
 Examples:
-  $ forgebox build:firmware ./keystone3-firmware
+  $ forgebox build:firmware ./forgebox-firmware
   $ forgebox build:firmware . -o ./dist
 `)
     .action(async (source, options) => {
@@ -22,7 +22,7 @@ Examples:
         
         if (!fs.existsSync(buildScript)) {
             console.error(chalk.red(`Error: build.py not found in ${sourceDir}`));
-            console.error(chalk.yellow('Please provide the path to the keystone3-firmware repository root.'));
+            console.error(chalk.yellow('Please provide the path to the forgebox-firmware repository root.'));
             process.exit(1);
         }
 
