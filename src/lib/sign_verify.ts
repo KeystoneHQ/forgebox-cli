@@ -7,8 +7,6 @@ const ec = new EC('secp256k1');
 
 const CHUNK_SIZE = 16384;
 const UPDATE_MARK = '~fwdata!';
-const PUBLIC_KEY_HEX =
-  '10e917932011a09187b4d3422156bfb71479c7393e16fab736f36466b477a8f6a7b94c4d9aa575d674e7b51d49937f5a3f29cd2c1b82792fdd1f022ce9ce908d';
 
 type HeaderOptions = {
   compressedSize: number;
@@ -50,7 +48,7 @@ function signDataWithKey(hash: Buffer, privateKeyHex: string): Buffer {
 }
 
 function verifySignature(hash: Buffer, signature: Buffer, publicKeyHex?: string | null): boolean {
-  const keyHex = publicKeyHex || PUBLIC_KEY_HEX;
+  const keyHex = publicKeyHex || "";
   const key = ec.keyFromPublic(keyHex, 'hex');
   const r = signature.slice(0, 32).toString('hex');
   const s = signature.slice(32, 64).toString('hex');
