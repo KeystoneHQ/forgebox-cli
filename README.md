@@ -179,4 +179,4 @@ forgebox interactive
 - **List Devices**: List connected devices.
 - **Get Device Status**: View device details.
 - **Generate Key Pair**: Interactively generate a key pair.
-- **Send K1 Public Key**: Register a public key (supports loading from file or manual Hex input).
+- **Register Public Key**: Register a public key (supports loading from file or manual Hex input).

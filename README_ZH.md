@@ -179,5 +179,5 @@ forgebox interactive
 - **List Devices**: 列出连接的设备。
 - **Get Device Status**: 查看设备详情。
 - **Generate Key Pair**: 交互式生成密钥对。
-- **Send K1 Public Key**: 注册公钥（支持从文件加载或手动输入 Hex）。
+- **Register Public Key**: 注册公钥（支持从文件加载或手动输入 Hex）。
 
