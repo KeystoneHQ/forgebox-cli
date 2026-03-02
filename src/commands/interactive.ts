@@ -29,7 +29,7 @@ async function showMainMenu() {
         'List Devices',
         'Get Device Status',
         'Generate Key Pair',
-        'Register Public Key-111',
+        'Register Public Key',
         'Exit'
       ]
     }
@@ -45,7 +45,7 @@ async function showMainMenu() {
     case 'Generate Key Pair':
       await handleGenerateKeyPair();
       break;
-    case 'Register Public Key-111':
+    case 'Register Public Key':
       await handleRegisterPublicKey();
       break;
     case 'Exit':
