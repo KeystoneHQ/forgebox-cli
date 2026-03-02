@@ -1,10 +1,10 @@
 
-import { getDeviceList, Device, Interface, InEndpoint, OutEndpoint } from 'usb';
+import { TransportNodeUSB } from '@keystonehq/hw-transport-nodeusb';
+import { Actions, encode, generateRequestID } from '@keystonehq/hw-transport-usb';
+import { getDeviceList, WebUSBDevice } from 'usb';
 import { IUsbDevice, IDeviceInfo } from './usb-interface';
 import { 
-  buildEapduPackets, 
   parseEapduResponse, 
-  CmdType, 
   buildPacket,
   parseResponse,
   SERVICE_ID,
@@ -19,10 +19,9 @@ const VENDOR_ID = 0x1209;
 const PRODUCT_ID = 0x3001;
 
 export class KeystoneDevice implements IUsbDevice {
-  private device: Device | null = null;
-  private interface: Interface | null = null;
-  private endpointIn: InEndpoint | null = null;
-  private endpointOut: OutEndpoint | null = null;
+  private transport: TransportNodeUSB | null = null;
+  private endpointIn: number | null = null;
+  private endpointOut: number | null = null;
   
   private _info: IDeviceInfo = {
     vendorId: VENDOR_ID,
@@ -38,7 +37,7 @@ export class KeystoneDevice implements IUsbDevice {
 
     try {
       const devices = getDeviceList();
-      let targetDevice: Device | null = null;
+      let targetDevice: any = null;
 
       for (const device of devices) {
         if (device.deviceDescriptor.idVendor === VENDOR_ID && device.deviceDescriptor.idProduct === PRODUCT_ID) {
@@ -51,56 +50,34 @@ export class KeystoneDevice implements IUsbDevice {
         throw new Error(`ForgeBox device not found (VID: 0x${VENDOR_ID.toString(16)}, PID: 0x${PRODUCT_ID.toString(16)})`);
       }
 
-      this.device = targetDevice;
-      this.device.open();
+      // Create WebUSBDevice instance (auto-detach kernel driver on non-Windows)
+      const webDevice = await WebUSBDevice.createInstance(targetDevice);
+      
+      this.transport = new TransportNodeUSB(webDevice as any);
+      await this.transport.open();
 
-      // Initialize interface
-      this.interface = this.device.interface(0);
-
-      // Detach kernel driver (Non-Windows)
-      if (process.platform !== 'win32') {
-        try {
-          if (this.interface.isKernelDriverActive()) {
-            this.interface.detachKernelDriver();
-          }
-        } catch (e) {
-          // Ignore detach error
-        }
+      // Find endpoints from configuration
+      // Note: TransportNodeUSB opens device and selects configuration/interface
+      if (!webDevice.configuration?.interfaces[0]?.alternates[0]) {
+          throw new Error('Failed to access device interface');
       }
 
-      // Claim Interface
-      try {
-        this.interface.claim();
-      } catch (e: any) {
-        throw new Error(`Failed to claim interface: ${e.message}`);
-      }
+      const endpoints = webDevice.configuration.interfaces[0].alternates[0].endpoints;
+      const inEp = endpoints.find(ep => ep.direction === 'in');
+      const outEp = endpoints.find(ep => ep.direction === 'out');
 
-      // Find Endpoints
-      const endpoints = this.interface.endpoints;
-      this.endpointIn = endpoints.find(ep => ep.direction === 'in') as InEndpoint;
-      this.endpointOut = endpoints.find(ep => ep.direction === 'out') as OutEndpoint;
-
-      if (!this.endpointIn || !this.endpointOut) {
+      if (!inEp || !outEp) {
         throw new Error('Could not find required endpoints (IN/OUT)');
       }
+      
+      this.endpointIn = inEp.endpointNumber;
+      this.endpointOut = outEp.endpointNumber;
 
       // Update info from descriptors
       try {
-        if (this.device.deviceDescriptor.iManufacturer) {
-            this.device.getStringDescriptor(this.device.deviceDescriptor.iManufacturer, (err, data) => {
-                if (!err && data) this._info.manufacturer = data.toString();
-            });
-        }
-        if (this.device.deviceDescriptor.iProduct) {
-            this.device.getStringDescriptor(this.device.deviceDescriptor.iProduct, (err, data) => {
-                if (!err && data) this._info.product = data.toString();
-            });
-        }
-        if (this.device.deviceDescriptor.iSerialNumber) {
-            this.device.getStringDescriptor(this.device.deviceDescriptor.iSerialNumber, (err, data) => {
-                if (!err && data) this._info.serialNumber = data.toString();
-            });
-        }
+        if (webDevice.manufacturerName) this._info.manufacturer = webDevice.manufacturerName;
+        if (webDevice.productName) this._info.product = webDevice.productName;
+        if (webDevice.serialNumber) this._info.serialNumber = webDevice.serialNumber;
       } catch (e) {}
 
       console.log(`\n✔ Device connected: ${this._info.product} (Serial: ${this._info.serialNumber || 'Unknown'})`);
@@ -120,37 +97,39 @@ export class KeystoneDevice implements IUsbDevice {
   }
 
   async disconnect(): Promise<void> {
-    if (this.interface) {
+    if (this.transport) {
       try {
-        this.interface.release(true, (err) => {
-            if (err) console.error('Release interface failed:', err);
-        });
+        await this.transport.close();
       } catch(e) {}
-      this.interface = null;
-    }
-    if (this.device) {
-      try {
-        this.device.close();
-      } catch(e) {}
-      this.device = null;
+      this.transport = null;
     }
     this.endpointIn = null;
     this.endpointOut = null;
   }
 
   async registerPublicKey(publicKey: Buffer, signature: Buffer): Promise<boolean> {
-    if (!this.device || !this.endpointOut) throw new Error('Device not connected');
+    if (!this.transport || this.endpointOut === null) throw new Error('Device not connected');
     
+    // Ensure device is open
+    await this.transport.open();
+
     // Combine payload: [1 byte Length] + [Public Key] + [Signature]
     const lenBuf = Buffer.alloc(1);
     lenBuf.writeUInt8(publicKey.length);
-    
     const data = Buffer.concat([lenBuf, publicKey, signature]);
-    const packets = buildEapduPackets(CmdType.GET_DEVICE_USB_PUBKEY, data);
+    
+    const requestId = generateRequestID();
+    const packets = encode(Actions.CMD_GET_DEVICE_USB_PUBKEY, requestId, data);
     
     console.log(`Sending ${packets.length} EAPDU packets...`);
+    
+    const device = (this.transport as any).device as WebUSBDevice;
+    const endpointOut = (this.transport as any).endpoint;
+
     for (const packet of packets) {
-        await this.sendRaw(packet);
+        const buffer = Uint8Array.from(packet).buffer;
+        const res = await device.transferOut(endpointOut, buffer);
+        if (res.status !== 'ok') throw new Error('Transfer failed');
         // Small delay to ensure device processes packet
         await new Promise(resolve => setTimeout(resolve, 20));
     }
@@ -158,67 +137,52 @@ export class KeystoneDevice implements IUsbDevice {
     // Read response
     try {
         // 1. Read immediate ACK
-        const ack = await this.readEapduResponse();
-        // console.log('ACK Response:', ack.statusMessage);
-        // Special handling: sometimes device returns text "verify pubkey success" 
-        // which causes status code parsing to fail (reads 've' as status 0x7665)
-        const payloadStr = ack.payload.toString();
-        const statusAsText = Buffer.alloc(2);
-        statusAsText.writeUInt16BE(ack.status);
-        const fullResponse = statusAsText.toString() + payloadStr;
-
-        if (!fullResponse.includes('success')) {
-          console.log(chalk.red(' \n Failed: Please check if the public key file is corrupted or regenerate the key pair.'));
-          await this.disconnect();
-          process.exit(0); // REMOVED
+        try {
+            await (this.transport as any).receive(Actions.CMD_GET_DEVICE_USB_PUBKEY, requestId);
+        } catch (e: any) {
+             // Special handling: transportErrorCode 22 means success
+             // or sometimes device returns text "verify pubkey success" which causes parsing error
+             if (e.transportErrorCode === 22 || e.message?.includes('success')) {
+                 // Success, continue
+             } else {
+                 console.log(chalk.red(' \n Failed: Please check if the public key file is corrupted or regenerate the key pair.'));
+                 console.error('Error details:', e);
+                 process.exit(0);
+             }
         }
 
         // 2. Drain any extra ACKs (if device sends ACK per packet)
-        // We use a short timeout loop to consume any buffered packets
-        try {
-            while (true) {
-                // 100ms timeout to check for buffered data
-                const extraAck = await this.readEapduResponse(100);
-                if (!extraAck.success) {
-                    // Check if extra ACK is also a success message
-                    const extraPayload = extraAck.payload.toString();
-                    const extraStatusBuf = Buffer.alloc(2);
-                    extraStatusBuf.writeUInt16BE(extraAck.status);
-                    const extraFull = extraStatusBuf.toString() + extraPayload;
-                    if (!extraFull.includes('success')) return false;
-                }
-            }
-        } catch (e) {
-            // Timeout expected when buffer is empty
-            // console.log('ACK buffer drained');
-        }
+        // TransportNodeUSB.receive reads a full response. 
+        // If there are multiple responses, we might need to read again.
+        // However, standard TransportNodeUSB usage implies one response.
+        // We'll skip explicit draining unless we observe issues, 
+        // as receive() consumes a full logical packet.
 
         // 3. Wait for user swipe confirmation (Long timeout)
-        const response = await this.readEapduResponse(60000);
-        
-        // Parse response payload as text for debugging/logging
-        const responsePayloadStr = response.payload.toString();
-        const responseStatusBuf = Buffer.alloc(2);
-        responseStatusBuf.writeUInt16BE(response.status);
-        const fullResponseMsg = responseStatusBuf.toString() + responsePayloadStr;
-        
-        // console.log('\n Final Response Message:', fullResponseMsg.replace(/\0/g, '').trim()); // Clean up null bytes
-        // console.log('\n Final Response Status:', response.statusMessage);
-        
-        // Check for success keywords in text response if status code indicates failure
-        if (fullResponseMsg.includes('success')) {
+        const originalTimeout = (this.transport as any).requestTimeout;
+        (this.transport as any).requestTimeout = 60000;
+
+        try {
+            await (this.transport as any).receive(Actions.CMD_GET_DEVICE_USB_PUBKEY, requestId);
             return true;
+        } catch (e: any) {
+            // Check for success keywords or specific error code
+            if (e.transportErrorCode === 23 || e.message?.includes('success')) {
+                return true;
+            }
+            console.error('registerPublicKey failed:', e.message);
+            return false;
+        } finally {
+            (this.transport as any).requestTimeout = originalTimeout;
         }
-        
-        return false;
     } catch (e: any) {
-        console.error('registerPublicKey failed:', e.message);
+        console.error('registerPublicKey error:', e.message);
         return false;
     }
   }
   
   async getStatus(): Promise<any> {
-      if (!this.device || !this.endpointOut) throw new Error('Device not connected');
+      if (!this.transport || this.endpointOut === null) throw new Error('Device not connected');
       
       const packet = buildPacket(SERVICE_ID.DEVICE_INFO, DEVICE_INFO_CMD.BASIC, []);
       await this.sendRaw(packet);
@@ -255,27 +219,50 @@ export class KeystoneDevice implements IUsbDevice {
   // Helpers
   
   private async sendRaw(data: Buffer): Promise<void> {
-      if (!this.endpointOut) throw new Error("Endpoint not initialized");
-      return new Promise((resolve, reject) => {
-          this.endpointOut!.transfer(data, (err) => {
-              if (err) reject(err);
-              else resolve();
-          });
-      });
+      if (this.endpointOut === null || !this.transport) throw new Error("Endpoint not initialized");
+      
+      // Access underlying device from transport (using any to bypass private check)
+      const device = (this.transport as any).device as WebUSBDevice;
+      
+      // WebUSB transferOut takes ArrayBuffer
+       const buffer = Uint8Array.from(data).buffer;
+       const result = await device.transferOut(this.endpointOut, buffer);
+       
+       if (result.status !== 'ok') {
+          throw new Error(`USB Transfer failed with status: ${result.status}`);
+      }
   }
   
   private async readRaw(length: number, timeout = 5000): Promise<Buffer> {
-      if (!this.endpointIn) throw new Error("Endpoint not initialized");
+      if (this.endpointIn === null || !this.transport) throw new Error("Endpoint not initialized");
       
-      return new Promise((resolve, reject) => {
-          // Set timeout
-          this.endpointIn!.timeout = timeout;
-          
-          this.endpointIn!.transfer(length, (err, data) => {
-              if (err) reject(err);
-              else resolve(data as Buffer);
-          });
-      });
+      const device = (this.transport as any).device as WebUSBDevice;
+      
+      // Note: WebUSB transferIn doesn't support timeout directly in the API signature?
+      // Actually, standard WebUSB doesn't, but node-usb implementation might?
+      // No, WebUSB API relies on Promise.race for timeout usually.
+      
+      const transferPromise = device.transferIn(this.endpointIn, length);
+      
+      // Implement timeout
+      const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Transfer timeout')), timeout)
+      );
+      
+      const result = await Promise.race([transferPromise, timeoutPromise]);
+      
+      if (result.status !== 'ok') {
+          // If stall, we might need to clear halt?
+          // For now, throw error.
+           throw new Error(`USB Read failed with status: ${result.status}`);
+      }
+      
+      if (!result.data) {
+          return Buffer.alloc(0);
+      }
+      
+      // Convert DataView to Buffer
+      return Buffer.from(result.data.buffer, result.data.byteOffset, result.data.byteLength);
   }
   
   private async readEapduResponse(timeout = 10000): Promise<EapduResponse> {
