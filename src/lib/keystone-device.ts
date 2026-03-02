@@ -167,7 +167,7 @@ export class KeystoneDevice implements IUsbDevice {
             return true;
         } catch (e: any) {
             // Check for success keywords or specific error code
-            if (e.transportErrorCode === 22 || e.message?.includes('success')) {
+            if (e.transportErrorCode === 23 || e.message?.includes('success')) {
                 return true;
             }
             console.error('registerPublicKey failed:', e.message);
