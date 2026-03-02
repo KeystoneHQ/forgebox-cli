@@ -43,7 +43,7 @@ export function registerRegisterCommand(program: Command) {
         privKeyPath = path.resolve(process.cwd(), options.key);
       }
       
-      // 1. 读取文件
+      // 1. Read files
       if (!fs.existsSync(pubKeyPath)) {
         console.error(chalk.red(`Error: Public key file not found at ${pubKeyPath}`));
         process.exit(1);
@@ -56,13 +56,13 @@ export function registerRegisterCommand(program: Command) {
       const pubKeyContent = fs.readFileSync(pubKeyPath, 'utf-8');
       const privKeyContent = fs.readFileSync(privKeyPath, 'utf-8');
       
-      // 简单验证一下是否是 PEM 格式
+      // Simple validation for PEM format
       if (!pubKeyContent.includes('BEGIN PUBLIC KEY')) {
         console.error(chalk.red('Error: Invalid PEM format. File must contain "BEGIN PUBLIC KEY" header.'));
         process.exit(1);
       }
 
-      // 2. 生成持有权证明 (Proof of Possession)
+      // 2. Generate Proof of Possession
       const prepSpinner = ora('Generating Proof of Possession signature...').start();
       let signature: Buffer;
       let rawPubKey: Buffer;
@@ -91,7 +91,7 @@ export function registerRegisterCommand(program: Command) {
       const spinner = ora('Searching for ForgeBox device...').start();
 
       try {
-        // 2. 连接设备
+        // 2. Connect to device
         const device = await UsbManager.findDevice();
         // device is already connected
         
@@ -104,7 +104,7 @@ export function registerRegisterCommand(program: Command) {
         // Calculate fingerprint for verification
         const fingerprint = createHash('sha256').update(rawPubKey).digest('hex');
 
-        // 3. 准备写入
+        // 3. Prepare to write
         spinner.start('Waiting for user confirmation on device...');
         
         console.log('');
@@ -114,7 +114,7 @@ export function registerRegisterCommand(program: Command) {
         console.log(chalk.yellow('  👉 Please COMPARE the fingerprint above with the one shown on the device.'));
         console.log(chalk.yellow('  👉 If they match, SWIPE on the device to confirm registration.\n'));
 
-        // 4. 发送指令并等待 (Send RAW key + Signature)
+        // 4. Send command and wait (Send RAW key + Signature)
         const success = await device.registerPublicKey(rawPubKey, signature);
 
         if (!success) {
@@ -126,7 +126,7 @@ export function registerRegisterCommand(program: Command) {
 
         spinner.succeed(chalk.green('Public key registered successfully!'));
 
-        // 5. 成功后的引导
+        // 5. Post-success guidance
         console.log('');
         console.log(chalk.cyan('  Success:'));
         console.log(chalk.white('  The public key has been securely stored on the ForgeBox device.'));
@@ -139,9 +139,9 @@ export function registerRegisterCommand(program: Command) {
         console.log(chalk.red('Operation failed:'), error);
         process.exit(1); // REMOVED
       } finally {
-        // 断开连接
+        // Disconnect
         // if (device) await device.disconnect(); 
-        // 这里的 device 作用域问题，实际代码应该在 try 外部定义 let device
+        // Scope issue with device, actual code should define let device outside try block
       }
     });
 }

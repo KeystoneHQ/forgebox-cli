@@ -12,7 +12,7 @@ export interface KeyPair {
 
 export class CryptoManager {
   /**
-   * 生成 secp256k1 密钥对
+   * Generate secp256k1 key pair
    */
   static generateKeyPair(): KeyPair {
     const { publicKey, privateKey } = generateKeyPairSync('ec', {
@@ -31,7 +31,7 @@ export class CryptoManager {
   }
 
   /**
-   * 保存密钥对到文件
+   * Save key pair to file
    */
   static saveKeys(keyPair: KeyPair, outputDir: string): { pubPath: string, privPath: string } {
     if (!fs.existsSync(outputDir)) {
@@ -48,24 +48,24 @@ export class CryptoManager {
   }
 
   /**
-   * 使用私钥对数据进行签名 (Deterministic RFC 6979)
+   * Sign data using private key (Deterministic RFC 6979)
    */
   static sign(privateKeyPem: string, data: Buffer): Buffer {
-    // 1. 从 PEM 中提取 Raw Private Key
-    // 为了兼容性，我们使用 crypto.createPrivateKey 导出 JWK，再转为 Buffer
+    // 1. Extract Raw Private Key from PEM
+    // For compatibility, we use crypto.createPrivateKey to export JWK, then convert to Buffer
     const { createPrivateKey } = require('crypto');
     const key = createPrivateKey(privateKeyPem);
     const jwk = key.export({ format: 'jwk' });
     
-    // jwk.d 是 base64url 编码的私钥
+    // jwk.d is the base64url encoded private key
     const rawPrivKey = Buffer.from(jwk.d!, 'base64url');
 
     const keyPair = ec.keyFromPrivate(rawPrivKey);
     
-    // 2. 计算哈希
+    // 2. Calculate Hash
     const msgHash = createHash('sha256').update(data).digest();
     
-    // 3. 确定性签名 (RFC 6979) + Low S (BIP-62)
+    // 3. Deterministic Signature (RFC 6979) + Low S (BIP-62)
     const sig = keyPair.sign(msgHash, { canonical: true, pers: [msgHash] });
     
     const r = sig.r.toArrayLike(Buffer, 'be', 32);
@@ -75,15 +75,15 @@ export class CryptoManager {
   }
 
   /**
-   * 使用 Raw Private Key Buffer 对数据进行签名 (Deterministic RFC 6979)
+   * Sign data using Raw Private Key Buffer (Deterministic RFC 6979)
    */
   static signBuffer(privateKey: Buffer, data: Buffer): Buffer {
     const keyPair = ec.keyFromPrivate(privateKey);
     
-    // 计算哈希
+    // Calculate Hash
     const msgHash = createHash('sha256').update(data).digest();
     
-    // 确定性签名 (RFC 6979) + Low S (BIP-62)
+    // Deterministic Signature (RFC 6979) + Low S (BIP-62)
     const sig = keyPair.sign(msgHash, { canonical: true, pers: [msgHash] });
     
     const r = sig.r.toArrayLike(Buffer, 'be', 32);
@@ -93,7 +93,7 @@ export class CryptoManager {
   }
 
   /**
-   * (工具方法) 验证签名 - 用于测试或模拟设备行为
+   * (Utility) Verify signature - Used for testing or simulating device behavior
    */
   static verify(publicKeyPem: string, data: Buffer, signature: Buffer): boolean {
     const verify = createVerify('SHA256');

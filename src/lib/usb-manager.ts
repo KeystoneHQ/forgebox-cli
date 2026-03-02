@@ -14,15 +14,15 @@ export interface ConnectedDeviceInfo {
 
 export class UsbManager {
   /**
-   * 列出所有连接的 USB 设备
-   * 可以在这里添加 VID/PID 过滤逻辑
+   * List all connected USB devices
+   * VID/PID filtering logic can be added here
    */
   static async listDevices(): Promise<ConnectedDeviceInfo[]> {
     const devices = getDeviceList();
     const result: ConnectedDeviceInfo[] = [];
 
     for (const device of devices) {
-      // 过滤逻辑：只显示指定 VID/PID 的设备 (ForgeBox)
+      // Filter logic: only show devices with specified VID/PID (ForgeBox)
       if (device.deviceDescriptor.idVendor !== VENDOR_ID || device.deviceDescriptor.idProduct !== PRODUCT_ID) {
         continue;
       }
@@ -34,7 +34,7 @@ export class UsbManager {
       try {
         device.open();
         
-        // 获取字符串描述符
+        // Get string descriptors
         try {
           if (device.deviceDescriptor.iManufacturer) {
             manufacturer = await new Promise<string>((resolve, reject) => {
@@ -67,7 +67,7 @@ export class UsbManager {
 
         device.close();
       } catch (error) {
-        // 无法打开设备（可能被占用或权限不足），只能使用 Descriptor 中的 ID
+        // Unable to open device (may be busy or insufficient permissions), can only use IDs from Descriptor
       }
       
       result.push({
@@ -84,7 +84,7 @@ export class UsbManager {
 
   static async findDevice(): Promise<IUsbDevice> {
     try {
-      // 优先尝试连接真实设备
+      // Prioritize connecting to real device
       const device = new KeystoneDevice();
       await device.connect();
       return device;

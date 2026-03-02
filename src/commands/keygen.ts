@@ -22,16 +22,16 @@ Examples:
       try {
         const outputDir = path.resolve(process.cwd(), options.out);
         
-        // 确保目录存在
+        // Ensure directory exists
         if (!fs.existsSync(outputDir)) {
           fs.mkdirSync(outputDir, { recursive: true });
         }
 
-        // 生成密钥
+        // Generate key pair
         const keys = CryptoManager.generateKeyPair();
         
 
-        // 保存文件
+        // Save files
         const { pubPath, privPath } = CryptoManager.saveKeys(keys, outputDir);
 
         spinner.succeed(chalk.green('Key pair generated successfully!'));

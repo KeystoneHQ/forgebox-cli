@@ -235,7 +235,7 @@ async function handleRegisterPublicKey() {
 
     spinner.succeed(chalk.green('Public key registered successfully!'));
 
-    // 5. 成功后的引导
+    // 5. Post-success guidance
     console.log('');
     console.log(chalk.cyan('  Success:'));
     console.log(chalk.white('  The public key has been securely stored on the ForgeBox device.'));
@@ -291,7 +291,7 @@ async function handleListDevices() {
     } else {
       console.log(chalk.green(`\nFound ${devices.length} device(s):\n`));
         
-      // 表格输出
+      // Table output
       console.log(
         chalk.gray('Product'.padEnd(30)) + 
         chalk.gray('Manufacturer'.padEnd(20)) +

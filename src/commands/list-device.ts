@@ -19,7 +19,7 @@ export function registerListDeviceCommand(program: Command) {
 
         console.log(chalk.green(`\nFound ${devices.length} device(s):\n`));
         
-        // 简单的表格输出
+        // Simple table output
         console.log(
           chalk.gray('Product'.padEnd(30)) + 
           chalk.gray('Manufacturer'.padEnd(20)) +

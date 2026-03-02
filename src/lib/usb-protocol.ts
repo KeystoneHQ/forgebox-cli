@@ -190,7 +190,7 @@ function encodeTLV(type: number, value?: Buffer): Buffer {
   let tlvBuffer;
   
   if (length > 127) {
-    // 长度大于 127，使用两字节编码
+    // Length > 127, use two-byte encoding
     tlvBuffer = Buffer.alloc(3 + length);
     tlvBuffer.writeUInt8(type, 0);
     tlvBuffer.writeUInt8(0x80 | (length >> 8), 1);
@@ -199,7 +199,7 @@ function encodeTLV(type: number, value?: Buffer): Buffer {
       value.copy(tlvBuffer, 3);
     }
   } else {
-    // 长度小于等于 127，使用单字节编码
+    // Length <= 127, use single-byte encoding
     tlvBuffer = Buffer.alloc(2 + length);
     tlvBuffer.writeUInt8(type, 0);
     tlvBuffer.writeUInt8(length, 1);
