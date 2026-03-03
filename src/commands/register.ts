@@ -83,7 +83,7 @@ export function registerRegisterCommand(program: Command) {
         
         prepSpinner.succeed(`Proof of Possession signature generated (Uncompressed Key: ${rawPubKey.length} bytes).`);
       } catch (error: any) {
-        prepSpinner.fail(chalk.red('Failed to generate signature. Check your private key.'));
+        prepSpinner.fail(chalk.red('Failed to generate signature. Please verify your private key and public key are valid and correspond to the same key pair.'));
         console.error(error.message);
         process.exit(1);
       }
