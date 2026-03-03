@@ -4,14 +4,12 @@ import { Actions, encode, generateRequestID } from '@keystonehq/hw-transport-usb
 import { getDeviceList, WebUSBDevice } from 'usb';
 import { IUsbDevice, IDeviceInfo } from './usb-interface';
 import { 
-  parseEapduResponse, 
   buildPacket,
   parseResponse,
   SERVICE_ID,
   DEVICE_INFO_CMD,
   TLV_TYPE,
   PROTOCOL,
-  EapduResponse
 } from './usb-protocol';
 import chalk from 'chalk';
 
@@ -263,27 +261,6 @@ export class KeystoneDevice implements IUsbDevice {
       
       // Convert DataView to Buffer
       return Buffer.from(result.data.buffer, result.data.byteOffset, result.data.byteLength);
-  }
-  
-  private async readEapduResponse(timeout = 10000): Promise<EapduResponse> {
-      // Read first packet (64 bytes for EAPDU)
-      const firstPacket = await this.readRaw(64, timeout);
-      const firstResponse = parseEapduResponse(firstPacket);
-      
-      if (firstResponse.totalPackets <= 1) {
-          return firstResponse;
-      }
-      
-      const allPayloads = [firstResponse.payload];
-      for (let i = 1; i < firstResponse.totalPackets; i++) {
-          const packet = await this.readRaw(64, timeout);
-          const response = parseEapduResponse(packet);
-          allPayloads.push(response.payload);
-      }
-      
-      const combinedPayload = Buffer.concat(allPayloads);
-      firstResponse.payload = combinedPayload;
-      return firstResponse;
   }
   
   private async readProtocolResponse(timeout = 5000): Promise<any> {
