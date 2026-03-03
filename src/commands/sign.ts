@@ -35,13 +35,19 @@ Examples:
         const keyPath = path.resolve(process.cwd(), keyInput);
         const keyContent = fs.readFileSync(keyPath, 'utf-8').trim();
         if (keyContent.includes('BEGIN')) {
-          const keyObj = createPrivateKey(keyContent);
-          const jwk = keyObj.export({ format: 'jwk' }) as { d?: string };
-          if (!jwk.d) {
-            console.error(chalk.red('Error: Invalid private key (missing JWK d).'));
+          try {
+            const keyObj = createPrivateKey(keyContent);
+            console.log('wwwwwwwwwwwww');
+            const jwk = keyObj.export({ format: 'jwk' }) as { d?: string };
+            if (!jwk.d) {
+              console.error(chalk.red('Error: Invalid private key (missing JWK d).'));
+              process.exit(1);
+            }
+            privateKeyHex = Buffer.from(jwk.d, 'base64url').toString('hex');
+          } catch {
+            console.error(chalk.red('Error: '), "Failed to parse private key. Please use an unencrypted secp256k1 private key in PEM format (BEGIN EC PRIVATE KEY / BEGIN PRIVATE KEY), or provide a 64-character hex private key.");
             process.exit(1);
           }
-          privateKeyHex = Buffer.from(jwk.d, 'base64url').toString('hex');
         } else {
           privateKeyHex = keyContent;
         }

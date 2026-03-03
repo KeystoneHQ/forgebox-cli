@@ -180,7 +180,8 @@ async function handleRegisterPublicKey() {
     console.log(chalk.gray(`\nLoaded keys from ${dirPath}`));
     console.log(chalk.gray(`Public Key: ${rawPubKey.toString('hex')}`));
   } catch (e: any) {
-    console.error(chalk.red('Failed to parse keys:'), e.message);
+    console.log(chalk.red('Failed to generate signature. Please verify your private key and public key are valid and correspond to the same key pair.'));
+    console.log(e.message);
     process.exit(1); // REMOVED
   }
   }
@@ -198,7 +199,8 @@ async function handleRegisterPublicKey() {
     }
     console.log(chalk.gray(`Signature: ${signature.toString('hex')}`));
   } catch (e: any) {
-    console.error(chalk.red('Failed to generate signature:'), e.message);
+    console.log(chalk.red('Failed to generate signature. Please verify your private key and public key are valid and correspond to the same key pair.'));
+    console.log(e.message);
     return;
   }
 
