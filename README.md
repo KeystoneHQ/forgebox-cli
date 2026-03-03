@@ -19,10 +19,10 @@ ForgeBox Hardware Wallet Management Tool. This tool is used for generating secur
 npm install
 
 # Compile and register global command
-npm run build
+npm run dev
 ```
 
-After executing `npm run build`, the CLI tool will be automatically registered to the system path, allowing you to use the `forgebox` command directly without specifying a relative path.
+After executing `npm run dev`, the CLI tool will be automatically registered to the system path, allowing you to use the `forgebox` command directly without specifying a relative path.
 
 ## Usage Guide
 
