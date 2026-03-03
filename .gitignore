@@ -2,3 +2,4 @@ node_modules/
 dist/
 my-firmware/
 my-keys/
+.DS_Store
