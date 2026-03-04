@@ -23,7 +23,6 @@ Examples:
       const sourcePath = path.resolve(process.cwd(), options.s);
       const destPath = path.resolve(process.cwd(), options.d);
       const keyInput = String(options.key || '').trim();
-
       if (!fs.existsSync(sourcePath)) {
         console.error(chalk.red(`Error: File not found: ${sourcePath}`));
         process.exit(1);
@@ -37,7 +36,6 @@ Examples:
         if (keyContent.includes('BEGIN')) {
           try {
             const keyObj = createPrivateKey(keyContent);
-            console.log('wwwwwwwwwwwww');
             const jwk = keyObj.export({ format: 'jwk' }) as { d?: string };
             if (!jwk.d) {
               console.error(chalk.red('Error: Invalid private key (missing JWK d).'));
