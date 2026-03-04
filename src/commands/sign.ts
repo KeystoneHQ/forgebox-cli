@@ -29,9 +29,15 @@ Examples:
       }
 
       let privateKeyHex = '';
+      const keyPath = path.resolve(process.cwd(), keyInput);
+      const inputLooksLikePath = keyInput.startsWith('./') || keyInput.startsWith('../') || path.isAbsolute(keyInput);
 
-      if (fs.existsSync(path.resolve(process.cwd(), keyInput))) {
-        const keyPath = path.resolve(process.cwd(), keyInput);
+      if (inputLooksLikePath && !fs.existsSync(keyPath)) {
+        console.error(chalk.red(`Error: Private key file not found: ${keyPath}`));
+        process.exit(1);
+      }
+
+      if (fs.existsSync(keyPath)) {
         const keyContent = fs.readFileSync(keyPath, 'utf-8').trim();
         if (keyContent.includes('BEGIN')) {
           try {
@@ -43,7 +49,7 @@ Examples:
             }
             privateKeyHex = Buffer.from(jwk.d, 'base64url').toString('hex');
           } catch {
-            console.error(chalk.red('Error: '), "Failed to parse private key. Please use an unencrypted secp256k1 private key in PEM format (BEGIN EC PRIVATE KEY / BEGIN PRIVATE KEY), or provide a 64-character hex private key.");
+            console.error(chalk.red('Error: Failed to parse private key. Please use an unencrypted secp256k1 private key in PEM format (BEGIN EC PRIVATE KEY / BEGIN PRIVATE KEY), or provide a 64-character hex private key.'));
             process.exit(1);
           }
         } else {
