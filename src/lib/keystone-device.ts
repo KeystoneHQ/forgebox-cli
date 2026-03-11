@@ -142,6 +142,10 @@ export class KeystoneDevice implements IUsbDevice {
              // or sometimes device returns text "verify pubkey success" which causes parsing error
              if (e.transportErrorCode === 22 || e.message?.includes('success')) {
                  // Success, continue
+                 // wait for user swipe
+             } else if (e.transportErrorCode === 25) {
+                  console.log(chalk.red(' \n Failed: The device already has a public key.'));
+                  process.exit(0);
              } else {
                  console.log(chalk.red(' \n Failed: Please check if the public key file is corrupted or regenerate the key pair.'));
                  console.error('Error details:', e);
