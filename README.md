@@ -12,17 +12,36 @@ ForgeBox Hardware Wallet Management Tool. This tool is used for generating secur
 - **sign**: Perform OTA signature packaging for firmware.
 - **interactive** (alias `i`): Launch an interactive menu mode supporting all common operations.
 
-## Installation & Build
+## Installation
+
+### For End Users (Install from npm)
+
+```bash
+# Install globally
+npm install -g forgebox-cli
+
+# Verify installation
+forgebox --version
+forgebox --help
+```
+
+You can also run it without global installation:
+
+```bash
+npx forgebox-cli --help
+```
+
+### For Contributors (Local Build)
 
 ```bash
 # Install dependencies
 npm install
 
-# Compile and register global command
+# Compile and register global command locally
 npm run dev
 ```
 
-After executing `npm run dev`, the CLI tool will be automatically registered to the system path, allowing you to use the `forgebox` command directly without specifying a relative path.
+After executing `npm run dev`, the CLI tool will be linked to your local system path, allowing you to use the `forgebox` command directly for development.
 
 ## Usage Guide
 
