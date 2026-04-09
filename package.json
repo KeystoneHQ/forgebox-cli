@@ -1,6 +1,6 @@
 {
-  "name": "forgebox_cli",
-  "version": "1.0.5",
+  "name": "forgebox-cli",
+  "version": "1.0.0",
   "main": "dist/index.js",
   "bin": {
     "forgebox": "./bin/forgebox"
@@ -30,7 +30,7 @@
   "description": "CLI tool for ForgeBox",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/KeystoneHQ/ForgeBox_cli.git"
+    "url": "git+https://github.com/KeystoneHQ/forgebox-cli.git"
   },
   "publishConfig": {
     "access": "public",
