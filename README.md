@@ -1,20 +1,20 @@
 # ForgeBox CLI
 
-ForgeBox Hardware Wallet Management Tool. This tool is used for generating secure credentials, managing hardware device public key registration, and executing firmware signing.
+ForgeBox CLI is a developer tool for managing ForgeBox devices, generating signing keys, registering device public keys, building firmware, and producing signed OTA packages.
 
 ## Features
 
-- **list-devices**: List all connected USB devices.
-- **status**: Get detailed device information (firmware version, serial number, etc.).
-- **keygen**: Generate secp256k1 standard public/private key pairs (PEM format).
-- **register**: Write the public key to the ForgeBox hardware device, supporting user Swipe-to-Confirm.
-- **build:firmware**: Compile firmware source code.
-- **sign**: Perform OTA signature packaging for firmware.
-- **interactive** (alias `i`): Launch an interactive menu mode supporting all common operations.
+- **list-devices**: Show all connected USB devices.
+- **status**: Display detailed device information such as firmware version and serial number.
+- **keygen**: Generate a secp256k1 key pair in PEM format.
+- **register**: Register a public key on a ForgeBox device with on-device confirmation.
+- **build:firmware**: Build firmware from source.
+- **sign**: Package firmware into a signed OTA image.
+- **interactive** (alias `i`): Launch an interactive menu for common workflows.
 
 ## Installation
 
-### For End Users (Install from npm)
+### Install from npm
 
 ```bash
 # Install globally
@@ -31,7 +31,7 @@ You can also run it without global installation:
 npx forgebox-cli --help
 ```
 
-### For Contributors (Local Build)
+### Local development
 
 ```bash
 # Install dependencies
@@ -41,19 +41,19 @@ npm install
 npm run dev
 ```
 
-After executing `npm run dev`, the CLI tool will be linked to your local system path, allowing you to use the `forgebox` command directly for development.
+After `npm run dev`, the CLI is linked into your local PATH so you can run `forgebox` directly during development.
 
-## Usage Guide
+## Usage
 
-### 1. List Devices (List Devices)
+### 1. List connected devices
 
-List information for all currently connected USB devices.
+List all currently connected USB devices.
 
 ```bash
 forgebox list-devices
 ```
 
-**Output Example:**
+**Example output:**
 ```
 Found 1 device(s):
 
@@ -62,15 +62,15 @@ Product                        Manufacturer         Serial               VID    
 ForgeBox                 Keystone             M-KYTJ69ND           0x1209  0x3001  
 ```
 
-### 2. View Device Status (Status)
+### 2. View device status
 
-Get detailed status information of the connected device, including model, serial number, firmware version, etc.
+Display detailed information about the connected device, including the model, serial number, and firmware version.
 
 ```bash
 forgebox status
 ```
 
-**Output Example:**
+**Example output:**
 ```
 ✓ Device Information:
   Model: ForgeBox
@@ -81,9 +81,9 @@ forgebox status
   Protocol Status: Connected
 ```
 
-### 3. Generate Credentials (Keygen)
+### 3. Generate a key pair
 
-Generate a public/private key pair compliant with the secp256k1 standard.
+Generate a secp256k1 public/private key pair.
 
 ```bash
 forgebox keygen --out <output_directory>
@@ -93,39 +93,44 @@ forgebox keygen --out <output_directory>
 ```bash
 forgebox keygen --out ./my-keys
 ```
-*Output:* Generates `private.pem` (private key) and `pubkey.pem` (public key) in the `./my-keys` directory.
 
-> ⚠️ **Note**: Please keep `private.pem` secure. Leaking the private key poses a security risk.
+This command writes `private.pem` and `pubkey.pem` to `./my-keys`.
 
-### 4. Register Public Key (Register)
+> Note: Keep `private.pem` secure. If the private key is exposed, anyone with access to it can sign firmware.
 
-Write the public key to the ForgeBox hardware device. For security, this process requires the corresponding private key to generate a "Proof of Possession".
+### 4. Register a public key
 
-**Method 1: Specify Directory (Recommended)**
-Automatically reads `pubkey.pem` and `private.pem` from the directory.
+Register a public key on the ForgeBox device. For security, the CLI uses the matching private key to generate a proof-of-possession signature.
+
+**Option 1: Pass a key directory**
+
+The CLI reads `pubkey.pem` and `private.pem` from the given directory.
+
 ```bash
 forgebox register ./my-keys
 ```
 
-**Method 2: Manually Specify Files**
+**Option 2: Pass the key files explicitly**
+
 ```bash
 forgebox register --pubkey ./my-keys/pubkey.pem --key ./my-keys/private.pem
 ```
 
-**Interaction Flow:**
-1. CLI verifies the public/private key pair match and generates a proof of possession signature.
-2. CLI automatically searches for and connects to the USB device.
-3. The terminal displays the public key fingerprint (SHA256), prompting the user to compare it with the content displayed on the device screen.
-4. **User Action**: After verifying the fingerprint on the hardware device, swipe the screen to confirm writing.
-5. The device validates the signature and saves the public key upon confirmation.
+**Registration flow:**
+1. The CLI verifies that the key pair matches and generates a proof-of-possession signature.
+2. It discovers and connects to the ForgeBox device over USB.
+3. It prints the public key fingerprint as a SHA-256 hash.
+4. Compare that fingerprint with the one shown on the device.
+5. If they match, confirm on the device by swiping.
+6. The device validates the signature and stores the public key.
 
-### 5. Build Firmware (Build Firmware)
+### 5. Build firmware
 
-Use the CLI tool to compile firmware source code.
+Build firmware from the ForgeBox firmware source tree.
 
 **Prerequisites:**
-1. Local environment has `python3` installed.
-2. Cross-compilation toolchain required for firmware compilation is installed (e.g., `arm-none-eabi-gcc`, refer to the firmware repository documentation for details).
+1. `python3` is installed locally.
+2. The firmware cross-compilation toolchain is installed, such as `arm-none-eabi-gcc`. Refer to the firmware repository for setup details.
 
 ```bash
 # 1. Clone firmware source code
@@ -136,38 +141,38 @@ forgebox build:firmware ./forgebox-firmware
 ```
 
 **Parameters:**
-- `[source]`: Firmware source code directory path (default: current directory).
+- `[source]`: Path to the firmware source directory. Defaults to the current directory.
 - `-o, --out <directory>`: Output directory for build artifacts (default: `./my-firmware`).
 
 **Example:**
 ```bash
 forgebox build:firmware ./forgebox-firmware -o ./my-firmware
 ```
-This command automatically invokes the `build.py` script in the source directory to execute compilation and copies the generated `mh1903_full.bin` to the specified output directory.
+This command runs `build.py` in the source directory and copies the generated firmware image to the output directory as `mh1903_full.bin`.
 
-**Alternative: Manual Build**
+**Alternative: build manually inside the firmware repository**
 
-If you prefer to operate within the firmware project, you can also run the build script directly in the `forgebox-firmware` directory:
+If you prefer to work directly in the firmware repository, run the build script there:
 
 ```bash
 cd forgebox-firmware
 python3 build.py -e production
 ```
 
-After successful compilation, the generated firmware file is located at `build/mh1903_full.bin`. You need to copy it out for easier identification and then use `forgebox sign` to sign it.
+After the build completes, the firmware artifact is located in the build output directory. Copy it to a convenient location if needed, then use `forgebox sign` to create a signed OTA package.
 
-### 6. Firmware Signing (Sign)
+### 6. Sign firmware
 
-Process the firmware file into an OTA signature package ready for upgrade.
+Convert a firmware binary into a signed OTA package ready for upgrade.
 
 ```bash
 forgebox sign --s <source_firmware_file> --d <signed_file> --key <private_key_file_or_hex>
 ```
 
 **Parameters:**
-- `--s`: Path to the source firmware file to be signed (e.g., `mh1903_full.bin` generated in the previous step)
-- `--d`: Path for the output signed OTA file
-- `--key`: Path to the private key file (PEM) or a 64-character private key hex string
+- `--s`: Path to the source firmware file, such as `mh1903_full.bin`
+- `--d`: Path to the output OTA package
+- `--key`: Path to a private key file in PEM format, or a 64-character private key hex string
 
 **Example:**
 ```bash
@@ -178,15 +183,15 @@ forgebox sign --s ./my-firmware/mh1903_full.bin --d ./my-firmware/forgebox.bin -
 forgebox sign --s ./my-firmware/mh1903_full.bin --d ./my-firmware/forgebox.bin --key your_private_key_hex
 ```
 
-**Execution Logic:**
-1. CLI compresses and chunks the firmware according to the OTA format.
-2. Calculates the SHA256 of the compressed data and the original data.
-3. Signs the hash using the private key and writes it to the header.
-4. Outputs an OTA file ready for direct upgrade.
+**What the command does:**
+1. Compresses and chunks the firmware according to the OTA format.
+2. Calculates SHA-256 hashes for the compressed data and the original firmware.
+3. Signs the required hash with the private key and writes the signature into the OTA header.
+4. Writes an OTA package that can be used directly for device upgrades.
 
-### 7. Interactive Mode (Interactive)
+### 7. Interactive mode
 
-Launch the interactive menu to easily perform common operations.
+Launch an interactive menu for the most common operations.
 
 ```bash
 forgebox i
@@ -194,8 +199,8 @@ forgebox i
 forgebox interactive
 ```
 
-**Menu Functions:**
-- **List Devices**: List connected devices.
-- **Get Device Status**: View device details.
-- **Generate Key Pair**: Interactively generate a key pair.
-- **Register Public Key**: Register a public key (supports loading from file or manual Hex input).
+**Available actions:**
+- **List Devices**: Show connected devices.
+- **Get Device Status**: Show detailed device information.
+- **Generate Key Pair**: Generate a key pair interactively.
+- **Register Public Key**: Register a public key from PEM files or manual hex input.
