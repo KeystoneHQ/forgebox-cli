@@ -3,6 +3,41 @@ import * as crypto from 'crypto';
 import { ec as EC } from 'elliptic';
 import { qlzCompress } from './quicklz';
 
+/**
+ * OTA package format.
+ *
+ * On-disk layout:
+ *
+ *   offset  size  field
+ *   ------  ----  ------------------------------------------------------------
+ *        0     4  headerLen (uint32 LE) — always 348
+ *        4     8  mark "~fwdata!"
+ *       12     4  compressedSize  (uint32 BE)
+ *       16     4  originalSize    (uint32 BE)
+ *       20    32  compressedHash  (SHA-256 of compressed payload)
+ *       52    32  originalHash    (SHA-256 of original firmware)
+ *       84     4  encode          (uint32 BE, always 1 = QuickLZ)
+ *       88     4  encodeUnit      (uint32 BE, always 16384 = CHUNK_SIZE)
+ *       92     4  encrypt         (uint32 BE, always 0)
+ *       96   128  signature       (compressed-hash sig, ASCII hex of 64 raw bytes)
+ *      224   128  originalSignature (original-hash sig, ASCII hex of 64 raw bytes)
+ *      352     1  reserved 0x00
+ *      353   ...  compressed payload (concatenated 16384-byte QuickLZ chunks)
+ *
+ * Notes / quirks:
+ *  - Signatures are written as 128 ASCII hex characters, NOT 64 raw bytes.
+ *    The bootloader treats the field as a C string (printf "%s", strlen,
+ *    per-char IsHexChar) and hex-decodes inside verify_frimware_signature.
+ *  - Two signatures share one private key: one over the compressed-payload
+ *    hash (verified before flashing) and one over the decompressed-firmware
+ *    hash (verified after flashing).
+ *  - Unsigned placeholders use distinct fill bytes so the bootloader's
+ *    IsHexChar check fails: 0x00 for `signature`, 0x1f for `originalSignature`.
+ *    The 0x1f value is historical — don't change it without a bootloader update.
+ *  - The format is wasteful (2x ASCII hex) but is locked in by shipped
+ *    bootloader firmware. Any change requires a coordinated bootloader release.
+ */
+
 const ec = new EC('secp256k1');
 
 const CHUNK_SIZE = 16384;
@@ -81,7 +116,7 @@ function buildHeader({
 
   if (signature) {
     const sigHex = signature.toString('hex');
-    const sigBytes = Buffer.from(sigHex, 'utf8');
+    const sigBytes = Buffer.from(sigHex, 'ascii');
     if (sigBytes.length !== 128) {
       throw new Error('signature hex length invalid');
     }
@@ -92,7 +127,7 @@ function buildHeader({
 
   if (originalSignature) {
     const sigHex = originalSignature.toString('hex');
-    const sigBytes = Buffer.from(sigHex, 'utf8');
+    const sigBytes = Buffer.from(sigHex, 'ascii');
     if (sigBytes.length !== 128) {
       throw new Error('original signature hex length invalid');
     }
@@ -115,7 +150,7 @@ function parseSignature(bytes: Buffer, placeholder: number): Buffer | null {
   if (allPlaceholder) {
     return null;
   }
-  const sigHex = bytes.toString('utf8');
+  const sigHex = bytes.toString('ascii');
   const sig = Buffer.from(sigHex, 'hex');
   if (sig.length !== 64) {
     throw new Error('signature length invalid');
