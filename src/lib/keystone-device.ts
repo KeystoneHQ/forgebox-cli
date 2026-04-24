@@ -107,9 +107,6 @@ export class KeystoneDevice implements IUsbDevice {
 
   async registerPublicKey(publicKey: Buffer, signature: Buffer): Promise<boolean> {
     if (!this.transport || this.endpointOut === null) throw new Error('Device not connected');
-    
-    // Ensure device is open
-    await this.transport.open();
 
     // Combine payload: [1 byte Length] + [Public Key] + [Signature]
     const lenBuf = Buffer.alloc(1);
@@ -144,12 +141,14 @@ export class KeystoneDevice implements IUsbDevice {
                  // Success, continue
                  // wait for user swipe
              } else if (e.transportErrorCode === 25) {
-                  console.log(chalk.red(' \n Failed: The device already has a public key.'));
-                  process.exit(0);
+                  throw new Error('Device already has a public key registered (one registration per lifetime).');
              } else {
-                 console.log(chalk.red(' \n Failed: Please check if the public key file is corrupted or regenerate the key pair.'));
-                 console.error('Error details:', e);
-                 process.exit(0);
+                 // Surface the device's own diagnostic verbatim instead of a generic
+                 // "check if the file is corrupted" message that hides the real cause
+                 // (USB error, disconnect, firmware-side rejection like "payload too
+                 // short" or "invalid pubkey length").
+                 const detail = e?.message || String(e);
+                 throw new Error(`Device rejected registration: ${detail}`);
              }
         }
 
