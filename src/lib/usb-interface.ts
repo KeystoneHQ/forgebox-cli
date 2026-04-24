@@ -19,6 +19,13 @@ export interface IUsbDevice {
   registerPublicKey(publicKey: Buffer, nonce: Buffer, signature: Buffer): Promise<boolean>;
 
   /**
+   * Register public key to legacy device firmware without nonce
+   * @param publicKey Public Key Raw Buffer (65 bytes)
+   * @param signature Signature of the public key content by private key
+   */
+  registerPublicKeyLegacy(publicKey: Buffer, signature: Buffer): Promise<boolean>;
+
+  /**
    * Request nonce from device for anti-replay signing flow
    * @returns Nonce bytes returned by device
    */

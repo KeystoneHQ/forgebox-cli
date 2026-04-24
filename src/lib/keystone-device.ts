@@ -144,64 +144,19 @@ export class KeystoneDevice implements IUsbDevice {
       throw new Error(`Invalid signature length: expected ${USB_SIGNATURE_LEN} bytes, got ${signature.length}`);
     }
     
-    // Ensure device is open
-    await this.transport.open();
+    return this.sendPubkeyRegistration(Buffer.concat([publicKey, nonce]), publicKey.length, signature);
+  }
 
-    // Combine payload: [1 byte Length] + [Public Key] + [Nonce] + [Signature]
-    const lenBuf = Buffer.alloc(1);
-    lenBuf.writeUInt8(publicKey.length);
-    const data = Buffer.concat([lenBuf, publicKey, nonce, signature]);
-    
-    const requestId = generateRequestID();
-    const packets = encode(Actions.CMD_GET_DEVICE_USB_PUBKEY, requestId, data);
-    
-    console.log(`Sending ${packets.length} EAPDU packets...`);
-    
-    const device = (this.transport as any).device as WebUSBDevice;
-    const endpointOut = (this.transport as any).endpoint;
-
-    for (const packet of packets) {
-        const buffer = Uint8Array.from(packet).buffer;
-        const res = await device.transferOut(endpointOut, buffer);
-        if (res.status !== 'ok') throw new Error('Transfer failed');
-        // Small delay to ensure device processes packet
-        await new Promise(resolve => setTimeout(resolve, 20));
+  async registerPublicKeyLegacy(publicKey: Buffer, signature: Buffer): Promise<boolean> {
+    if (!this.transport || this.endpointOut === null) throw new Error('Device not connected');
+    if (publicKey.length !== 65) {
+      throw new Error(`Invalid public key length: expected 65 bytes, got ${publicKey.length}`);
     }
-    
-    // Read response
-    try {
-        // 1. Read immediate ACK
-        const ackStatus = await this.receivePubkeyRegisterStatus(requestId);
-        if (!this.isPubkeyRegisterSuccessStatus(ackStatus)) {
-            this.logPubkeyRegisterFailure('ACK', ackStatus);
-            return false;
-        }
-
-        // 2. Drain any extra ACKs (if device sends ACK per packet)
-        // TransportNodeUSB.receive reads a full response. 
-        // If there are multiple responses, we might need to read again.
-        // However, standard TransportNodeUSB usage implies one response.
-        // We'll skip explicit draining unless we observe issues, 
-        // as receive() consumes a full logical packet.
-
-        // 3. Wait for user swipe confirmation (Long timeout)
-        const originalTimeout = (this.transport as any).requestTimeout;
-        (this.transport as any).requestTimeout = 60000;
-
-        try {
-            const confirmStatus = await this.receivePubkeyRegisterStatus(requestId);
-            if (!this.isPubkeyRegisterSuccessStatus(confirmStatus)) {
-                this.logPubkeyRegisterFailure('CONFIRM', confirmStatus);
-                return false;
-            }
-            return true;
-        } finally {
-            (this.transport as any).requestTimeout = originalTimeout;
-        }
-    } catch (e: any) {
-        console.error('registerPublicKey error:', e.message);
-        return false;
+    if (signature.length !== USB_SIGNATURE_LEN) {
+      throw new Error(`Invalid signature length: expected ${USB_SIGNATURE_LEN} bytes, got ${signature.length}`);
     }
+
+    return this.sendPubkeyRegistration(publicKey, publicKey.length, signature);
   }
   
   async getStatus(): Promise<any> {
@@ -389,6 +344,54 @@ export class KeystoneDevice implements IUsbDevice {
       }
 
       throw new Error('Timed out waiting for device nonce response');
+  }
+
+  private async sendPubkeyRegistration(publicKeyPayload: Buffer, publicKeyLength: number, signature: Buffer): Promise<boolean> {
+      await this.transport!.open();
+
+      const lenBuf = Buffer.alloc(1);
+      lenBuf.writeUInt8(publicKeyLength);
+      const data = Buffer.concat([lenBuf, publicKeyPayload, signature]);
+
+      const requestId = generateRequestID();
+      const packets = encode(Actions.CMD_GET_DEVICE_USB_PUBKEY, requestId, data);
+
+      console.log(`Sending ${packets.length} EAPDU packets...`);
+
+      const device = (this.transport as any).device as WebUSBDevice;
+      const endpointOut = (this.transport as any).endpoint;
+
+      for (const packet of packets) {
+          const buffer = Uint8Array.from(packet).buffer;
+          const res = await device.transferOut(endpointOut, buffer);
+          if (res.status !== 'ok') throw new Error('Transfer failed');
+          await new Promise(resolve => setTimeout(resolve, 20));
+      }
+
+      try {
+          const ackStatus = await this.receivePubkeyRegisterStatus(requestId);
+          if (!this.isPubkeyRegisterSuccessStatus(ackStatus)) {
+              this.logPubkeyRegisterFailure('ACK', ackStatus);
+              return false;
+          }
+
+          const originalTimeout = (this.transport as any).requestTimeout;
+          (this.transport as any).requestTimeout = 60000;
+
+          try {
+              const confirmStatus = await this.receivePubkeyRegisterStatus(requestId);
+              if (!this.isPubkeyRegisterSuccessStatus(confirmStatus)) {
+                  this.logPubkeyRegisterFailure('CONFIRM', confirmStatus);
+                  return false;
+              }
+              return true;
+          } finally {
+              (this.transport as any).requestTimeout = originalTimeout;
+          }
+      } catch (e: any) {
+          console.error('registerPublicKey error:', e.message);
+          return false;
+      }
   }
 
   private getNonceStatusName(status: NonceRequestStatus): string {
