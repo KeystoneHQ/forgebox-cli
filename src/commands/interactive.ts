@@ -258,7 +258,7 @@ async function handleRegisterPublicKey() {
       // throw new Error('Device returned failure status. Please check the device screen and try again.');
       console.log(chalk.red(' \n Failed: Device returned failure status. Please check the device screen and try again.'));
       await device.disconnect();
-      return;
+      process.exit(1);
     }
 
     spinner.succeed(chalk.green('Public key registered successfully!'));
