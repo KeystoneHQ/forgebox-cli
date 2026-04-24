@@ -31,18 +31,20 @@ export class CryptoManager {
   }
 
   /**
-   * Save key pair to file
+   * Save key pair to file. Private key is written 0600; directory 0700.
+   * The explicit chmod guards against pre-existing files written with a wider umask.
    */
   static saveKeys(keyPair: KeyPair, outputDir: string): { pubPath: string, privPath: string } {
     if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
+      fs.mkdirSync(outputDir, { recursive: true, mode: 0o700 });
     }
 
     const pubPath = path.join(outputDir, 'pubkey.pem');
     const privPath = path.join(outputDir, 'private.pem');
 
-    fs.writeFileSync(pubPath, keyPair.publicKey);
-    fs.writeFileSync(privPath, keyPair.privateKey);
+    fs.writeFileSync(pubPath, keyPair.publicKey, { mode: 0o644 });
+    fs.writeFileSync(privPath, keyPair.privateKey, { mode: 0o600 });
+    try { fs.chmodSync(privPath, 0o600); } catch { /* best-effort on Windows */ }
 
     return { pubPath, privPath };
   }
