@@ -137,7 +137,7 @@ Build firmware from the ForgeBox firmware source tree.
 git clone https://github.com/KeystoneHQ/forgebox-helloworld.git
 
 # 2. Execute build command
-forgebox build:firmware ./forgebox-firmware
+forgebox build:firmware ./forgebox-helloworld
 ```
 
 **Parameters:**
@@ -146,7 +146,7 @@ forgebox build:firmware ./forgebox-firmware
 
 **Example:**
 ```bash
-forgebox build:firmware ./forgebox-firmware -o ./my-firmware
+forgebox build:firmware ./forgebox-helloworld -o ./my-firmware
 ```
 This command runs `build.py` in the source directory and copies the generated firmware image to the output directory as `mh1903_full.bin`.
 
