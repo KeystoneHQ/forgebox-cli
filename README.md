@@ -132,7 +132,7 @@ Use the CLI tool to compile firmware source code.
 git clone https://github.com/KeystoneHQ/forgebox-helloworld.git
 
 # 2. Execute build command
-forgebox build:firmware ./forgebox-firmware
+forgebox build:firmware ./forgebox-helloworld
 ```
 
 **Parameters:**
@@ -141,13 +141,13 @@ forgebox build:firmware ./forgebox-firmware
 
 **Example:**
 ```bash
-forgebox build:firmware ./forgebox-firmware -o ./my-firmware
+forgebox build:firmware ./forgebox-helloworld -o ./my-firmware
 ```
 This command automatically invokes the `build.py` script in the source directory to execute compilation and copies the generated `mh1903_full.bin` to the specified output directory.
 
 **Alternative: Manual Build**
 
-If you prefer to operate within the firmware project, you can also run the build script directly in the `forgebox-firmware` directory:
+If you prefer to operate within the firmware project, you can also run the build script directly in the `forgebox-helloworld` directory:
 
 ```bash
 cd forgebox-helloworld
