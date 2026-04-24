@@ -16,6 +16,16 @@ import chalk from 'chalk';
 const VENDOR_ID = 0x1209;
 const PRODUCT_ID = 0x3001;
 
+enum PubkeyRegisterStatus {
+  OK = 0,
+  INVALID_PARAMS = 20,
+  VERIFY_FAILED = 21,
+  VERIFY_SUCCESS = 22,
+  SET_SUCCESS = 23,
+  SET_FAILED = 24,
+  HAS_SET = 25,
+}
+
 export class KeystoneDevice implements IUsbDevice {
   private transport: TransportNodeUSB | null = null;
   private endpointIn: number | null = null;
@@ -135,22 +145,10 @@ export class KeystoneDevice implements IUsbDevice {
     // Read response
     try {
         // 1. Read immediate ACK
-        try {
-            await (this.transport as any).receive(Actions.CMD_GET_DEVICE_USB_PUBKEY, requestId);
-        } catch (e: any) {
-             // Special handling: transportErrorCode 22 means success
-             // or sometimes device returns text "verify pubkey success" which causes parsing error
-             if (e.transportErrorCode === 22 || e.message?.includes('success')) {
-                 // Success, continue
-                 // wait for user swipe
-             } else if (e.transportErrorCode === 25) {
-                  console.log(chalk.red(' \n Failed: The device already has a public key.'));
-                  process.exit(0);
-             } else {
-                 console.log(chalk.red(' \n Failed: Please check if the public key file is corrupted or regenerate the key pair.'));
-                 console.error('Error details:', e);
-                 process.exit(0);
-             }
+        const ackStatus = await this.receivePubkeyRegisterStatus(requestId);
+        if (!this.isPubkeyRegisterSuccessStatus(ackStatus)) {
+            this.logPubkeyRegisterFailure('ACK', ackStatus);
+            return false;
         }
 
         // 2. Drain any extra ACKs (if device sends ACK per packet)
@@ -165,15 +163,12 @@ export class KeystoneDevice implements IUsbDevice {
         (this.transport as any).requestTimeout = 60000;
 
         try {
-            await (this.transport as any).receive(Actions.CMD_GET_DEVICE_USB_PUBKEY, requestId);
-            return true;
-        } catch (e: any) {
-            // Check for success keywords or specific error code
-            if (e.transportErrorCode === 23 || e.message?.includes('success')) {
-                return true;
+            const confirmStatus = await this.receivePubkeyRegisterStatus(requestId);
+            if (!this.isPubkeyRegisterSuccessStatus(confirmStatus)) {
+                this.logPubkeyRegisterFailure('CONFIRM', confirmStatus);
+                return false;
             }
-            console.error('registerPublicKey failed:', e.message);
-            return false;
+            return true;
         } finally {
             (this.transport as any).requestTimeout = originalTimeout;
         }
@@ -271,5 +266,53 @@ export class KeystoneDevice implements IUsbDevice {
       // Protocol packet size can be large, read max
       const data = await this.readRaw(PROTOCOL.MAX_PACKET_SIZE, timeout);
       return parseResponse(data);
+  }
+
+  private async receivePubkeyRegisterStatus(requestId: number): Promise<PubkeyRegisterStatus> {
+      try {
+          await (this.transport as any).receive(Actions.CMD_GET_DEVICE_USB_PUBKEY, requestId);
+          return PubkeyRegisterStatus.OK;
+      } catch (e: any) {
+          const code = e?.transportErrorCode;
+          if (typeof code === 'number') {
+              return code as PubkeyRegisterStatus;
+          }
+          throw e;
+      }
+  }
+
+  private isPubkeyRegisterSuccessStatus(status: PubkeyRegisterStatus): boolean {
+      return status === PubkeyRegisterStatus.OK ||
+        status === PubkeyRegisterStatus.VERIFY_SUCCESS ||
+        status === PubkeyRegisterStatus.SET_SUCCESS;
+  }
+
+  private getPubkeyRegisterStatusName(status: PubkeyRegisterStatus): string {
+      const map: Record<number, string> = {
+          [PubkeyRegisterStatus.OK]: 'OK',
+          [PubkeyRegisterStatus.INVALID_PARAMS]: 'PRS_SET_PUBKEY_INVALID_PARAMS',
+          [PubkeyRegisterStatus.VERIFY_FAILED]: 'PRS_SET_PUBKEY_VERIFY_FAILED',
+          [PubkeyRegisterStatus.VERIFY_SUCCESS]: 'PRS_SET_PUBKEY_VERIFY_SUCCESS',
+          [PubkeyRegisterStatus.SET_SUCCESS]: 'PRS_SET_PUBKEY_SET_SUCCESS',
+          [PubkeyRegisterStatus.SET_FAILED]: 'PRS_SET_PUBKEY_SET_FAILED',
+          [PubkeyRegisterStatus.HAS_SET]: 'PRS_SET_PUBKEY_HAS_SET',
+      };
+      return map[status] ?? `UNKNOWN_STATUS_${status}`;
+  }
+
+  private getPubkeyRegisterStatusMessage(status: PubkeyRegisterStatus): string {
+      const map: Record<number, string> = {
+          [PubkeyRegisterStatus.INVALID_PARAMS]: 'Invalid payload: public key/signature length or format is incorrect.',
+          [PubkeyRegisterStatus.VERIFY_FAILED]: 'Signature verification failed on device.',
+          [PubkeyRegisterStatus.SET_FAILED]: 'Device failed to persist public key to secure storage.',
+          [PubkeyRegisterStatus.HAS_SET]: 'The device already has a registered public key.',
+      };
+      return map[status] ?? 'Device rejected request.';
+  }
+
+  private logPubkeyRegisterFailure(stage: 'ACK' | 'CONFIRM', status: PubkeyRegisterStatus): void {
+      const name = this.getPubkeyRegisterStatusName(status);
+      const msg = this.getPubkeyRegisterStatusMessage(status);
+      console.log(chalk.red(` \n Failed at ${stage}: ${msg} (${name})`));
   }
 }
