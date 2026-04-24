@@ -86,17 +86,33 @@ forgebox status
 Generate a secp256k1 public/private key pair.
 
 ```bash
-forgebox keygen --out <output_directory>
+forgebox keygen
 ```
 
-**Example:**
+By default, keys are written to `~/.forgebox/keys/`:
+
+- `~/.forgebox/keys/private.pem` (mode `0600`)
+- `~/.forgebox/keys/pubkey.pem` (mode `0644`)
+
+The containing directory is created with mode `0700`.
+
+**Options:**
+- `-o, --out <directory>`: override the output directory.
+- `-f, --force`: allow writing keys into a git working tree (not recommended — see below).
+
+**Examples:**
 ```bash
-forgebox keygen --out ./my-keys
+# Default: ~/.forgebox/keys
+forgebox keygen
+
+# Custom location outside any repo
+forgebox keygen --out ~/secure-storage
 ```
 
-This command writes `private.pem` and `pubkey.pem` to `./my-keys`.
-
-> Note: Keep `private.pem` secure. If the private key is exposed, anyone with access to it can sign firmware.
+**Safety:**
+- `keygen` refuses to write into a git working tree. A committed private key is equivalent to publishing it. Pass `--force` only if you understand the risk, and make sure `*.pem` is in your `.gitignore`.
+- Back up both `private.pem` and `pubkey.pem` to offline storage **before** running `forgebox register`. The device accepts **one** public-key registration per lifetime — losing the private key means you cannot sign firmware for that device again.
+- Never paste the private key on the command line or into chat tools.
 
 ### 4. Register a public key
 
@@ -107,13 +123,13 @@ Register a public key on the ForgeBox device. For security, the CLI uses the mat
 The CLI reads `pubkey.pem` and `private.pem` from the given directory.
 
 ```bash
-forgebox register ./my-keys
+forgebox register ~/.forgebox/keys
 ```
 
 **Option 2: Pass the key files explicitly**
 
 ```bash
-forgebox register --pubkey ./my-keys/pubkey.pem --key ./my-keys/private.pem
+forgebox register --pubkey ~/.forgebox/keys/pubkey.pem --key ~/.forgebox/keys/private.pem
 ```
 
 **Registration flow:**
@@ -176,12 +192,12 @@ forgebox sign --s <source_firmware_file> --d <signed_file> --key <private_key_fi
 
 **Example:**
 ```bash
-# Sign using a private key file
-forgebox sign --s ./my-firmware/mh1903_full.bin --d ./my-firmware/forgebox.bin --key ./my-keys/private.pem
-
-# Sign using a private key hex string
-forgebox sign --s ./my-firmware/mh1903_full.bin --d ./my-firmware/forgebox.bin --key your_private_key_hex
+forgebox sign --s ./my-firmware/mh1903_full.bin \
+              --d ./my-firmware/forgebox.bin \
+              --key ~/.forgebox/keys/private.pem
 ```
+
+> Passing the private key as a hex string on the command line is still accepted but strongly discouraged: the key ends up in your shell history, `ps` output, and audit logs. Use a PEM file.
 
 **What the command does:**
 1. Compresses and chunks the firmware according to the OTA format.

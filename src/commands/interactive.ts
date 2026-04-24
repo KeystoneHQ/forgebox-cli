@@ -4,9 +4,21 @@ import chalk from 'chalk';
 import ora from 'ora';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { createHash, createPublicKey } from 'crypto';
 import { UsbManager } from '../lib/usb-manager';
 import { CryptoManager } from '../lib/crypto';
+
+const DEFAULT_KEY_DIR = path.join(os.homedir(), '.forgebox', 'keys');
+
+function isInsideGitRepo(dir: string): boolean {
+  let cur = path.resolve(dir);
+  while (cur !== path.dirname(cur)) {
+    if (fs.existsSync(path.join(cur, '.git'))) return true;
+    cur = path.dirname(cur);
+  }
+  return false;
+}
 
 export function registerInteractiveCommand(program: Command) {
   program
@@ -64,29 +76,46 @@ async function handleGenerateKeyPair() {
       type: 'input',
       name: 'outputDir',
       message: 'Enter output directory:',
-      default: './my-keys'
+      default: DEFAULT_KEY_DIR
     }
   ]);
 
   const resolvedPath = path.resolve(process.cwd(), outputDir);
-  const spinner = ora(`Generating key pair in ${outputDir}...`).start();
+
+  if (isInsideGitRepo(resolvedPath)) {
+    const { proceed } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'proceed',
+        message: chalk.red(
+          `Path is inside a git working tree:\n  ${resolvedPath}\n` +
+          `A committed private key is equivalent to publishing it. Continue anyway?`
+        ),
+        default: false,
+      },
+    ]);
+    if (!proceed) {
+      console.log(chalk.yellow('Aborted. Re-run and pick a directory outside any repo.'));
+      process.exit(1);
+    }
+  }
+
+  const spinner = ora(`Generating key pair in ${resolvedPath}...`).start();
 
   try {
-    // Ensure directory exists
-    if (!fs.existsSync(resolvedPath)) {
-        fs.mkdirSync(resolvedPath, { recursive: true });
-    }
-
     const keyPair = CryptoManager.generateKeyPair();
     const paths = CryptoManager.saveKeys(keyPair, resolvedPath);
-    
-    spinner.succeed(chalk.green('Key pair generated successfully!'));
+
+    spinner.succeed(chalk.green('Key pair generated.'));
     console.log('');
-    console.log(`  ${chalk.cyan('Private Key:')} ${paths.privPath}`);
-    console.log(`  ${chalk.cyan('Public Key:')}  ${paths.pubPath}`);
+    console.log(`  ${chalk.cyan('Private Key:')} ${paths.privPath} ${chalk.gray('(0600)')}`);
+    console.log(`  ${chalk.cyan('Public Key: ')} ${paths.pubPath}`);
     console.log('');
-    console.log(chalk.yellow('  ⚠️  Keep your private key safe!'));
-    
+    console.log(chalk.yellow('  ⚠  This private key is the ONLY thing that can sign firmware'));
+    console.log(chalk.yellow('     for your device after registration. The device accepts'));
+    console.log(chalk.yellow('     ONE public-key registration per lifetime.'));
+    console.log(chalk.yellow('  ⚠  Back up both files offline BEFORE running `forgebox register`.'));
+
     process.exit(0); // REMOVED: Return to menu
   } catch (error: any) {
     spinner.fail(chalk.red('Failed to generate key pair'));
