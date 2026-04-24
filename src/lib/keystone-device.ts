@@ -4,7 +4,11 @@ import { Actions, encode, generateRequestID } from '@keystonehq/hw-transport-usb
 import { getDeviceList, WebUSBDevice } from 'usb';
 import { IUsbDevice, IDeviceInfo } from './usb-interface';
 import { 
+  buildEapduPackets,
   buildPacket,
+  CmdType,
+  EAPDU,
+  parseEapduResponse,
   parseResponse,
   SERVICE_ID,
   DEVICE_INFO_CMD,
@@ -15,6 +19,12 @@ import chalk from 'chalk';
 
 const VENDOR_ID = 0x1209;
 const PRODUCT_ID = 0x3001;
+const USB_NONCE_LEN = 32;
+const USB_SIGNATURE_LEN = 64;
+// Firmware enum CommandType:
+// CMD_GET_DEVICE_USB_PUBKEY = 0x00000006
+// CMD_GET_DEVICE_RANDOM     = 0x00000007
+const ACTION_GET_DEVICE_RANDOM = CmdType.GET_DEVICE_RANDOM;
 
 enum PubkeyRegisterStatus {
   OK = 0,
@@ -24,9 +34,13 @@ enum PubkeyRegisterStatus {
   SET_SUCCESS = 23,
   SET_FAILED = 24,
   HAS_SET = 25,
-  GET_NONCE_PARAMS_INVALID = 30,
-  GET_NONCE_PARAMS_SUCCESS = 31,
-  GET_NONCE_PARAMS_FAILED = 32,
+}
+
+enum NonceRequestStatus {
+  OK = 0,
+  RANDOM_NUM_INVALID_PARAMS = 30,
+  RANDOM_NUM_SUCCESS = 31,
+  RANDOM_NUM_FAILED = 32,
 }
 
 export class KeystoneDevice implements IUsbDevice {
@@ -118,16 +132,25 @@ export class KeystoneDevice implements IUsbDevice {
     this.endpointOut = null;
   }
 
-  async registerPublicKey(publicKey: Buffer, signature: Buffer): Promise<boolean> {
+  async registerPublicKey(publicKey: Buffer, nonce: Buffer, signature: Buffer): Promise<boolean> {
     if (!this.transport || this.endpointOut === null) throw new Error('Device not connected');
+    if (publicKey.length !== 65) {
+      throw new Error(`Invalid public key length: expected 65 bytes, got ${publicKey.length}`);
+    }
+    if (nonce.length !== USB_NONCE_LEN) {
+      throw new Error(`Invalid nonce length: expected ${USB_NONCE_LEN} bytes, got ${nonce.length}`);
+    }
+    if (signature.length !== USB_SIGNATURE_LEN) {
+      throw new Error(`Invalid signature length: expected ${USB_SIGNATURE_LEN} bytes, got ${signature.length}`);
+    }
     
     // Ensure device is open
     await this.transport.open();
 
-    // Combine payload: [1 byte Length] + [Public Key] + [Signature]
+    // Combine payload: [1 byte Length] + [Public Key] + [Nonce] + [Signature]
     const lenBuf = Buffer.alloc(1);
     lenBuf.writeUInt8(publicKey.length);
-    const data = Buffer.concat([lenBuf, publicKey, signature]);
+    const data = Buffer.concat([lenBuf, publicKey, nonce, signature]);
     
     const requestId = generateRequestID();
     const packets = encode(Actions.CMD_GET_DEVICE_USB_PUBKEY, requestId, data);
@@ -212,6 +235,34 @@ export class KeystoneDevice implements IUsbDevice {
       return this._info;
   }
 
+  async getNonce(): Promise<Buffer> {
+      if (!this.transport || this.endpointOut === null) throw new Error('Device not connected');
+      const requestId = generateRequestID();
+      const packets = buildEapduPackets(ACTION_GET_DEVICE_RANDOM, Buffer.alloc(0), requestId);
+      const device = (this.transport as any).device as WebUSBDevice;
+      const endpointOut = (this.transport as any).endpoint;
+
+      for (const packet of packets) {
+          const buffer = Uint8Array.from(packet).buffer;
+          const res = await device.transferOut(endpointOut, buffer);
+          if (res.status !== 'ok') throw new Error('Transfer failed');
+          await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      const { status, payload } = await this.readNonceResponse(requestId);
+      if (status === NonceRequestStatus.OK || status === NonceRequestStatus.RANDOM_NUM_SUCCESS) {
+          const nonce = this.extractNonceBuffer(payload);
+          if (!nonce) {
+              throw new Error(`Failed to parse nonce payload (${this.getNonceStatusName(status)}).`);
+          }
+          if (nonce.length !== USB_NONCE_LEN) {
+              throw new Error(`Invalid nonce length: expected ${USB_NONCE_LEN} bytes, got ${nonce.length}`);
+          }
+          return nonce;
+      }
+
+      throw new Error(`${this.getNonceStatusMessage(status)} (${this.getNonceStatusName(status)}).`);
+  }
+
   async verifySignature(data: Buffer, signature: Buffer): Promise<boolean> {
       throw new Error("Method not implemented in new protocol.");
   }
@@ -287,8 +338,7 @@ export class KeystoneDevice implements IUsbDevice {
   private isPubkeyRegisterSuccessStatus(status: PubkeyRegisterStatus): boolean {
       return status === PubkeyRegisterStatus.OK ||
         status === PubkeyRegisterStatus.VERIFY_SUCCESS ||
-        status === PubkeyRegisterStatus.SET_SUCCESS ||
-        status === PubkeyRegisterStatus.GET_NONCE_PARAMS_SUCCESS;
+        status === PubkeyRegisterStatus.SET_SUCCESS;
   }
 
   private getPubkeyRegisterStatusName(status: PubkeyRegisterStatus): string {
@@ -300,9 +350,6 @@ export class KeystoneDevice implements IUsbDevice {
           [PubkeyRegisterStatus.SET_SUCCESS]: 'PRS_SET_PUBKEY_SET_SUCCESS',
           [PubkeyRegisterStatus.SET_FAILED]: 'PRS_SET_PUBKEY_SET_FAILED',
           [PubkeyRegisterStatus.HAS_SET]: 'PRS_SET_PUBKEY_HAS_SET',
-          [PubkeyRegisterStatus.GET_NONCE_PARAMS_INVALID]: 'PRS_GET_NONCE_PARAMS_INVALID',
-          [PubkeyRegisterStatus.GET_NONCE_PARAMS_SUCCESS]: 'PRS_GET_NONCE_PARAMS_SUCCESS',
-          [PubkeyRegisterStatus.GET_NONCE_PARAMS_FAILED]: 'PRS_GET_NONCE_PARAMS_FAILED',
       };
       return map[status] ?? `UNKNOWN_STATUS_${status}`;
   }
@@ -313,8 +360,6 @@ export class KeystoneDevice implements IUsbDevice {
           [PubkeyRegisterStatus.VERIFY_FAILED]: 'Signature verification failed on device.',
           [PubkeyRegisterStatus.SET_FAILED]: 'Device failed to persist public key to secure storage.',
           [PubkeyRegisterStatus.HAS_SET]: 'The device already has a registered public key.',
-          [PubkeyRegisterStatus.GET_NONCE_PARAMS_INVALID]: 'Invalid params while requesting nonce from device.',
-          [PubkeyRegisterStatus.GET_NONCE_PARAMS_FAILED]: 'Device failed to provide nonce parameters.',
       };
       return map[status] ?? 'Device rejected request.';
   }
@@ -323,5 +368,76 @@ export class KeystoneDevice implements IUsbDevice {
       const name = this.getPubkeyRegisterStatusName(status);
       const msg = this.getPubkeyRegisterStatusMessage(status);
       console.log(chalk.red(` \n Failed at ${stage}: ${msg} (${name})`));
+  }
+
+  private async readNonceResponse(requestId: number): Promise<{ status: NonceRequestStatus; payload: Buffer }> {
+      const deadline = Date.now() + PROTOCOL.DEFAULT_TIMEOUT;
+
+      while (Date.now() < deadline) {
+          const remaining = Math.max(1, deadline - Date.now());
+          const raw = await this.readRaw(EAPDU.MAX_PACKET_LENGTH, remaining);
+          const response = parseEapduResponse(raw);
+
+          if (response.commandType !== ACTION_GET_DEVICE_RANDOM || response.requestId !== requestId) {
+              continue;
+          }
+
+          return {
+              status: response.status as NonceRequestStatus,
+              payload: response.payload,
+          };
+      }
+
+      throw new Error('Timed out waiting for device nonce response');
+  }
+
+  private getNonceStatusName(status: NonceRequestStatus): string {
+      const map: Record<number, string> = {
+          [NonceRequestStatus.OK]: 'OK',
+          [NonceRequestStatus.RANDOM_NUM_INVALID_PARAMS]: 'PRS_GET_RANDOM_NUM_INVALID_PARAMS',
+          [NonceRequestStatus.RANDOM_NUM_SUCCESS]: 'PRS_GET_RANDOM_NUM_SUCCESS',
+          [NonceRequestStatus.RANDOM_NUM_FAILED]: 'PRS_GET_RANDOM_NUM_FAILED',
+      };
+      return map[status] ?? `UNKNOWN_NONCE_STATUS_${status}`;
+  }
+
+  private getNonceStatusMessage(status: NonceRequestStatus): string {
+      const map: Record<number, string> = {
+          [NonceRequestStatus.RANDOM_NUM_INVALID_PARAMS]: 'Invalid params while requesting random number from device',
+          [NonceRequestStatus.RANDOM_NUM_FAILED]: 'Device failed to provide random number (nonce)',
+      };
+      return map[status] ?? 'Device nonce request failed';
+  }
+
+  private extractNonceBuffer(payload: unknown): Buffer | null {
+      if (Buffer.isBuffer(payload)) {
+          return payload.length > 0 ? payload : null;
+      }
+      if (payload instanceof Uint8Array) {
+          return payload.length > 0 ? Buffer.from(payload) : null;
+      }
+      if (typeof payload === 'object' && payload !== null) {
+          const obj = payload as Record<string, unknown>;
+          return this.extractNonceBuffer(obj.nonce ?? obj.random ?? obj.random_number ?? obj.payload ?? null);
+      }
+      if (typeof payload !== 'string') {
+          return null;
+      }
+
+      const trimmed = payload.trim();
+      if (!trimmed) return null;
+
+      const hex = trimmed.replace(/^0x/i, '');
+      if (/^[0-9a-fA-F]+$/.test(hex) && hex.length % 2 === 0) {
+          const buf = Buffer.from(hex, 'hex');
+          return buf.length > 0 ? buf : null;
+      }
+
+      try {
+          const parsed = JSON.parse(trimmed) as unknown;
+          return this.extractNonceBuffer(parsed);
+      } catch {
+          return Buffer.from(trimmed, 'utf8');
+      }
   }
 }

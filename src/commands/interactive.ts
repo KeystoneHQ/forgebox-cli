@@ -131,7 +131,6 @@ async function handleRegisterPublicKey() {
       name: 'inputType',
       message: 'How would you like to provide the keys?',
       choices: [
-        'Enter Hex Keys Manually',
         'Load from Local File (PEM)',
         new inquirer.Separator(),
         '< Back'
@@ -144,44 +143,17 @@ async function handleRegisterPublicKey() {
   }
 
   let rawPubKey: Buffer;
-  let rawPrivKey: Buffer | string; // Hex buffer or PEM string
+  let rawPrivKey: string;
 
-  if (inputType === 'Enter Hex Keys Manually') {
-    const answers = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'pubkey',
-        message: 'Enter Public Key (Hex):',
-        validate: (input) => {
-          if (!/^[0-9a-fA-F]+$/.test(input)) return 'Must be valid Hex string';
-          if (input.length !== 130) return 'Public Key must be 65 bytes (130 hex chars)';
-          if (!input.startsWith('04')) return 'Public Key must start with 04 (Uncompressed)';
-          return true;
-        }
-      },
-      {
-        type: 'input',
-        name: 'privkey',
-        message: 'Enter Private Key (Hex):',
-        validate: (input) => {
-          if (!/^[0-9a-fA-F]+$/.test(input)) return 'Must be valid Hex string';
-          if (input.length !== 64) return 'Private Key must be 32 bytes (64 hex chars)';
-          return true;
-        }
-      }
-    ]);
-    rawPubKey = Buffer.from(answers.pubkey, 'hex');
-    rawPrivKey = Buffer.from(answers.privkey, 'hex');
-  } else {
-    // Load from File
-    const { keyDir } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'keyDir',
-        message: 'Enter directory path containing keys:',
-        default: './my-keys'
-      }
-    ]);
+  // Load from File
+  const { keyDir } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'keyDir',
+      message: 'Enter directory path containing keys:',
+      default: DEFAULT_KEY_DIR
+    }
+  ]);
 
     const dirPath = path.resolve(process.cwd(), keyDir);
     const pubPath = path.join(dirPath, 'pubkey.pem');
@@ -213,25 +185,8 @@ async function handleRegisterPublicKey() {
     console.log(e.message);
     process.exit(1); // REMOVED
   }
-  }
-
-  console.log(chalk.gray(`\nGenerating signature...`));
-
   let signature: Buffer;
-  try {
-    if (Buffer.isBuffer(rawPrivKey)) {
-      // Hex Key
-      signature = CryptoManager.signBuffer(rawPrivKey, rawPubKey);
-    } else {
-      // PEM String
-      signature = CryptoManager.sign(rawPrivKey, rawPubKey);
-    }
-    console.log(chalk.gray(`Signature: ${signature.toString('hex')}`));
-  } catch (e: any) {
-    console.log(chalk.red('Failed to generate signature. Please verify your private key and public key are valid and correspond to the same key pair.'));
-    console.log(e.message);
-    return;
-  }
+  let nonce: Buffer;
 
   const spinner = ora('Connecting to device...').start();
   try {
@@ -242,6 +197,11 @@ async function handleRegisterPublicKey() {
     spinner.succeed(chalk.green(`Connected to ${info.product} (${info.manufacturer})`));
     console.log(chalk.gray(`  Serial: ${info.serialNumber}`));
     console.log('');
+
+    nonce = await device.getNonce();
+
+    const signPayload = Buffer.concat([rawPubKey, nonce]);
+    signature = CryptoManager.sign(rawPrivKey, signPayload);
 
     // Calculate fingerprint for verification
     const fingerprint = createHash('sha256').update(rawPubKey).digest('hex');
@@ -255,11 +215,10 @@ async function handleRegisterPublicKey() {
     console.log(chalk.yellow('  👉 Please COMPARE the fingerprint above with the one shown on the device.'));
     console.log(chalk.yellow('  👉 If they match, SWIPE on the device to confirm registration.\n'));
 
-    const success = await device.registerPublicKey(rawPubKey, signature);
+    const success = await device.registerPublicKey(rawPubKey, nonce, signature);
     
     if (!success) {
       // throw new Error('Device returned failure status. Please check the device screen and try again.');
-      console.log(chalk.red(' \n Failed: Device returned failure status. Please check the device screen and try again.'));
       await device.disconnect();
       process.exit(0); // REMOVED
     }
