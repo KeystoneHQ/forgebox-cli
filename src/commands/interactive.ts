@@ -11,6 +11,10 @@ import { CryptoManager } from '../lib/crypto';
 
 const DEFAULT_KEY_DIR = path.join(os.homedir(), '.forgebox', 'keys');
 
+function shouldUseLegacyRegistration(firmwareVersion: unknown): boolean {
+  return String(firmwareVersion || '').trim() === '1.0.0';
+}
+
 function isInsideGitRepo(dir: string): boolean {
   let cur = path.resolve(dir);
   while (cur !== path.dirname(cur)) {
@@ -186,7 +190,7 @@ async function handleRegisterPublicKey() {
     process.exit(1); // REMOVED
   }
   let signature: Buffer;
-  let nonce: Buffer;
+  let nonce: Buffer | null = null;
 
   const spinner = ora('Connecting to device...').start();
   try {
@@ -194,14 +198,25 @@ async function handleRegisterPublicKey() {
     // device is already connected
     
     const info = device.getInfo();
+    const status = await device.getStatus();
+    const firmwareVersion = String(status?.firmwareVersion || '').trim();
+    const useLegacyRegistration = shouldUseLegacyRegistration(firmwareVersion);
     spinner.succeed(chalk.green(`Connected to ${info.product} (${info.manufacturer})`));
     console.log(chalk.gray(`  Serial: ${info.serialNumber}`));
     console.log('');
 
-    nonce = await device.getNonce();
-
-    const signPayload = Buffer.concat([rawPubKey, nonce]);
-    signature = CryptoManager.sign(rawPrivKey, signPayload);
+    spinner.start('Preparing registration...');
+    try {
+      if (useLegacyRegistration) {
+        signature = CryptoManager.sign(rawPrivKey, rawPubKey);
+      } else {
+        nonce = await device.getNonce();
+        const signPayload = Buffer.concat([rawPubKey, nonce]);
+        signature = CryptoManager.sign(rawPrivKey, signPayload);
+      }
+    } catch {
+      throw new Error('Failed to prepare registration request.');
+    }
 
     // Calculate fingerprint for verification
     const fingerprint = createHash('sha256').update(rawPubKey).digest('hex');
@@ -215,7 +230,9 @@ async function handleRegisterPublicKey() {
     console.log(chalk.yellow('  👉 Please COMPARE the fingerprint above with the one shown on the device.'));
     console.log(chalk.yellow('  👉 If they match, SWIPE on the device to confirm registration.\n'));
 
-    const success = await device.registerPublicKey(rawPubKey, nonce, signature);
+    const success = useLegacyRegistration
+      ? await device.registerPublicKeyLegacy(rawPubKey, signature)
+      : await device.registerPublicKey(rawPubKey, nonce!, signature);
     
     if (!success) {
       // throw new Error('Device returned failure status. Please check the device screen and try again.');
