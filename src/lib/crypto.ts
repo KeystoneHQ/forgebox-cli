@@ -50,48 +50,38 @@ export class CryptoManager {
   }
 
   /**
+   * Canonical signing primitive. ALL signing in this CLI must go through here
+   * so that the RFC-6979 personalization (`pers`) and Low-S (`canonical`)
+   * parameters can never drift between call sites.
+   */
+  static signHash(privateKey: Buffer, msgHash: Buffer): Buffer {
+    const keyPair = ec.keyFromPrivate(privateKey);
+    const sig = keyPair.sign(msgHash, { canonical: true, pers: [msgHash] });
+    const r = sig.r.toArrayLike(Buffer, 'be', 32);
+    const s = sig.s.toArrayLike(Buffer, 'be', 32);
+    return Buffer.concat([r, s]);
+  }
+
+  /**
    * Sign data using private key (Deterministic RFC 6979)
    */
   static sign(privateKeyPem: string, data: Buffer): Buffer {
-    // 1. Extract Raw Private Key from PEM
-    // For compatibility, we use crypto.createPrivateKey to export JWK, then convert to Buffer
+    // Extract Raw Private Key from PEM via JWK roundtrip
     const { createPrivateKey } = require('crypto');
     const key = createPrivateKey(privateKeyPem);
     const jwk = key.export({ format: 'jwk' });
-    
-    // jwk.d is the base64url encoded private key
     const rawPrivKey = Buffer.from(jwk.d!, 'base64url');
 
-    const keyPair = ec.keyFromPrivate(rawPrivKey);
-    
-    // 2. Calculate Hash
     const msgHash = createHash('sha256').update(data).digest();
-    
-    // 3. Deterministic Signature (RFC 6979) + Low S (BIP-62)
-    const sig = keyPair.sign(msgHash, { canonical: true, pers: [msgHash] });
-    
-    const r = sig.r.toArrayLike(Buffer, 'be', 32);
-    const s = sig.s.toArrayLike(Buffer, 'be', 32);
-    
-    return Buffer.concat([r, s]);
+    return CryptoManager.signHash(rawPrivKey, msgHash);
   }
 
   /**
    * Sign data using Raw Private Key Buffer (Deterministic RFC 6979)
    */
   static signBuffer(privateKey: Buffer, data: Buffer): Buffer {
-    const keyPair = ec.keyFromPrivate(privateKey);
-    
-    // Calculate Hash
     const msgHash = createHash('sha256').update(data).digest();
-    
-    // Deterministic Signature (RFC 6979) + Low S (BIP-62)
-    const sig = keyPair.sign(msgHash, { canonical: true, pers: [msgHash] });
-    
-    const r = sig.r.toArrayLike(Buffer, 'be', 32);
-    const s = sig.s.toArrayLike(Buffer, 'be', 32);
-    
-    return Buffer.concat([r, s]);
+    return CryptoManager.signHash(privateKey, msgHash);
   }
 
   /**

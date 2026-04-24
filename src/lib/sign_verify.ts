@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { ec as EC } from 'elliptic';
 import { qlzCompress } from './quicklz';
+import { CryptoManager } from './crypto';
 
 /**
  * OTA package format.
@@ -75,11 +76,8 @@ function compressChunks(buf: Buffer): Buffer {
 }
 
 function signDataWithKey(hash: Buffer, privateKeyHex: string): Buffer {
-  const key = ec.keyFromPrivate(privateKeyHex, 'hex');
-  const sig = key.sign(hash, { canonical: true });
-  const r = sig.r.toArrayLike(Buffer, 'be', 32);
-  const s = sig.s.toArrayLike(Buffer, 'be', 32);
-  return Buffer.concat([r, s]);
+  // Delegate to the single canonical signer (RFC-6979 + Low-S + pers).
+  return CryptoManager.signHash(Buffer.from(privateKeyHex, 'hex'), hash);
 }
 
 function verifySignature(hash: Buffer, signature: Buffer, publicKeyHex?: string | null): boolean {
