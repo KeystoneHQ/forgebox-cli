@@ -12,55 +12,50 @@ export function registerSignCommand(program: Command) {
     .description('Sign firmware into OTA package')
     .requiredOption('-s, --s <path>', 'Source firmware file path')
     .requiredOption('-d, --d <path>', 'Destination signed file path')
-    .requiredOption('-k, --key <value>', 'Private key path or hex string')
+    .requiredOption('-k, --key <path>', 'Private key PEM file path')
     .addHelpText('after', `
 
 Examples:
   $ forgebox sign --s firmware.bin --d update.bin --key ./my-keys/private.pem
-  $ forgebox sign -s firmware.bin -d update.bin --key 1ac4593491b2f705e94ffb0249a7def9ddf0cf5c0ba5647469bfd7f531299a62
 `)
     .action(async (options) => {
       const sourcePath = path.resolve(process.cwd(), options.s);
       const destPath = path.resolve(process.cwd(), options.d);
       const keyInput = String(options.key || '').trim();
+      const keyPath = path.resolve(process.cwd(), keyInput);
       if (!fs.existsSync(sourcePath)) {
         console.error(chalk.red(`Error: File not found: ${sourcePath}`));
         process.exit(1);
       }
 
       let privateKeyHex = '';
-      const keyPath = path.resolve(process.cwd(), keyInput);
-      const inputLooksLikePath = keyInput.startsWith('./') || keyInput.startsWith('../') || path.isAbsolute(keyInput);
 
-      if (inputLooksLikePath && !fs.existsSync(keyPath)) {
+      if (!fs.existsSync(keyPath)) {
         console.error(chalk.red(`Error: Private key file not found: ${keyPath}`));
         process.exit(1);
       }
 
-      if (fs.existsSync(keyPath)) {
-        const keyContent = fs.readFileSync(keyPath, 'utf-8').trim();
-        if (keyContent.includes('BEGIN')) {
-          try {
-            const keyObj = createPrivateKey(keyContent);
-            const jwk = keyObj.export({ format: 'jwk' }) as { d?: string };
-            if (!jwk.d) {
-              console.error(chalk.red('Error: Invalid private key (missing JWK d).'));
-              process.exit(1);
-            }
-            privateKeyHex = Buffer.from(jwk.d, 'base64url').toString('hex');
-          } catch {
-            console.error(chalk.red('Error: Failed to parse private key. Please use an unencrypted secp256k1 private key in PEM format (BEGIN EC PRIVATE KEY / BEGIN PRIVATE KEY), or provide a 64-character hex private key.'));
-            process.exit(1);
-          }
-        } else {
-          privateKeyHex = keyContent;
+      const keyContent = fs.readFileSync(keyPath, 'utf-8').trim();
+      if (!keyContent.includes('BEGIN')) {
+        console.error(chalk.red('Error: Invalid private key file. Only PEM format is supported (BEGIN EC PRIVATE KEY / BEGIN PRIVATE KEY).'));
+        process.exit(1);
+      }
+
+      try {
+        const keyObj = createPrivateKey(keyContent);
+        const jwk = keyObj.export({ format: 'jwk' }) as { d?: string };
+        if (!jwk.d) {
+          console.error(chalk.red('Error: Invalid private key (missing JWK d).'));
+          process.exit(1);
         }
-      } else {
-        privateKeyHex = keyInput;
+        privateKeyHex = Buffer.from(jwk.d, 'base64url').toString('hex');
+      } catch {
+        console.error(chalk.red('Error: Failed to parse private key. Please use an unencrypted secp256k1 private key in PEM format (BEGIN EC PRIVATE KEY / BEGIN PRIVATE KEY).'));
+        process.exit(1);
       }
 
       if (!/^[0-9a-fA-F]{64}$/.test(privateKeyHex)) {
-        console.error(chalk.red('Error: Invalid private key hex. Expected 64 hex characters.'));
+        console.error(chalk.red('Error: Invalid private key PEM content. Expected a secp256k1 private key.'));
         process.exit(1);
       }
 
