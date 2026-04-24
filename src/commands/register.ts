@@ -65,6 +65,7 @@ export function registerRegisterCommand(program: Command) {
       // 2. Generate Proof of Possession
       const prepSpinner = ora('Generating Proof of Possession signature...').start();
       let signature: Buffer;
+      let nonce: Buffer;
       let rawPubKey: Buffer;
       try {
         // Convert PEM to Raw Public Key (Uncompressed 65 bytes)
@@ -77,11 +78,7 @@ export function registerRegisterCommand(program: Command) {
         console.log(chalk.gray(`\nPreparing to send public key with signature...`));
         console.log(chalk.gray(`  Public key: ${rawPubKey.toString('hex')}`));
 
-        // Sign the UNCOMPRESSED public key bytes
-        signature = CryptoManager.sign(privKeyContent, rawPubKey);
-        console.log(chalk.gray(`  Signature: ${signature.toString('hex')}`));
-        
-        prepSpinner.succeed(`Proof of Possession signature generated (Uncompressed Key: ${rawPubKey.length} bytes).`);
+        prepSpinner.succeed(`Public key prepared (Uncompressed Key: ${rawPubKey.length} bytes).`);
       } catch (error: any) {
         prepSpinner.fail(chalk.red('Failed to generate signature. Please verify your private key and public key are valid and correspond to the same key pair.'));
         console.error(error.message);
@@ -101,10 +98,18 @@ export function registerRegisterCommand(program: Command) {
         console.log(chalk.gray(`  Serial: ${info.serialNumber}`));
         console.log('');
 
+        // 3. Request nonce from device
+        spinner.start('Requesting nonce from device...');
+        nonce = await device.getNonce();
+
+        // 4. Generate proof-of-possession signature over hash(pubkey || nonce)
+        const signPayload = Buffer.concat([rawPubKey, nonce]);
+        signature = CryptoManager.sign(privKeyContent, signPayload);
+
         // Calculate fingerprint for verification
         const fingerprint = createHash('sha256').update(rawPubKey).digest('hex');
 
-        // 3. Prepare to write
+        // 5. Prepare to write
         spinner.start('Waiting for user confirmation on device...');
         
         console.log('');
@@ -114,12 +119,11 @@ export function registerRegisterCommand(program: Command) {
         console.log(chalk.yellow('  👉 Please COMPARE the fingerprint above with the one shown on the device.'));
         console.log(chalk.yellow('  👉 If they match, SWIPE on the device to confirm registration.\n'));
 
-        // 4. Send command and wait (Send RAW key + Signature)
-        const success = await device.registerPublicKey(rawPubKey, signature);
+        // 6. Send command and wait (Send RAW key + nonce + Signature)
+        const success = await device.registerPublicKey(rawPubKey, nonce, signature);
 
         if (!success) {
              // throw new Error('Device returned failure status. Please check the device screen and try again.');
-            console.log(chalk.red(' \n Failed: Device returned failure status. Please check the device screen and try again.'));
             await device.disconnect(); 
             process.exit(1);
         }
