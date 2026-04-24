@@ -119,12 +119,9 @@ async function handleGenerateKeyPair() {
     console.log(chalk.yellow('     for your device after registration. The device accepts'));
     console.log(chalk.yellow('     ONE public-key registration per lifetime.'));
     console.log(chalk.yellow('  ⚠  Back up both files offline BEFORE running `forgebox register`.'));
-
-    process.exit(0); // REMOVED: Return to menu
   } catch (error: any) {
     spinner.fail(chalk.red('Failed to generate key pair'));
     console.error(error.message);
-    process.exit(1); // REMOVED
   }
 }
 
@@ -187,7 +184,7 @@ async function handleRegisterPublicKey() {
   } catch (e: any) {
     console.log(chalk.red('Failed to generate signature. Please verify your private key and public key are valid and correspond to the same key pair.'));
     console.log(e.message);
-    process.exit(1); // REMOVED
+    return;
   }
   let signature: Buffer;
   let nonce: Buffer | null = null;
@@ -252,10 +249,8 @@ async function handleRegisterPublicKey() {
     console.log(chalk.white('  $ ') + chalk.yellow(`forgebox sign --file <firmware.bin> --key <private.pem>`));
 
     await device.disconnect();
-    process.exit(0); // REMOVED
   } catch (error: any) {
     console.log(chalk.red('Operation failed:'), error);
-    process.exit(1); // REMOVED
   }
 }
 
@@ -280,12 +275,10 @@ async function handleGetStatus() {
     }
     
     await device.disconnect();
-    process.exit(0); // REMOVED
   } catch (error: any) {
     spinner.fail('Failed to get status');
     console.error(error instanceof Error ? error.message : JSON.stringify(error));
     if (process.env.DEBUG) console.error(error);
-    process.exit(1); // REMOVED
   }
 }
 
@@ -322,9 +315,7 @@ async function handleListDevices() {
       });
       console.log('');
     }
-    process.exit(0); // REMOVED
   } catch (e: any) {
     console.error('Error:', e.message);
-    process.exit(1); // REMOVED
   }
 }
