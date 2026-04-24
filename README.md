@@ -134,7 +134,7 @@ Build firmware from the ForgeBox firmware source tree.
 
 ```bash
 # 1. Clone firmware source code
-git clone https://github.com/keystonehq/forgebox-firmware.git
+git clone https://github.com/KeystoneHQ/forgebox-helloworld.git
 
 # 2. Execute build command
 forgebox build:firmware ./forgebox-firmware
@@ -155,7 +155,7 @@ This command runs `build.py` in the source directory and copies the generated fi
 If you prefer to work directly in the firmware repository, run the build script there:
 
 ```bash
-cd forgebox-firmware
+cd forgebox-helloworld
 python3 build.py -e production
 ```
 
