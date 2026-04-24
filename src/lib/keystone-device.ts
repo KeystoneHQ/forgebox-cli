@@ -24,6 +24,9 @@ enum PubkeyRegisterStatus {
   SET_SUCCESS = 23,
   SET_FAILED = 24,
   HAS_SET = 25,
+  GET_NONCE_PARAMS_INVALID = 30,
+  GET_NONCE_PARAMS_SUCCESS = 31,
+  GET_NONCE_PARAMS_FAILED = 32,
 }
 
 export class KeystoneDevice implements IUsbDevice {
@@ -284,7 +287,8 @@ export class KeystoneDevice implements IUsbDevice {
   private isPubkeyRegisterSuccessStatus(status: PubkeyRegisterStatus): boolean {
       return status === PubkeyRegisterStatus.OK ||
         status === PubkeyRegisterStatus.VERIFY_SUCCESS ||
-        status === PubkeyRegisterStatus.SET_SUCCESS;
+        status === PubkeyRegisterStatus.SET_SUCCESS ||
+        status === PubkeyRegisterStatus.GET_NONCE_PARAMS_SUCCESS;
   }
 
   private getPubkeyRegisterStatusName(status: PubkeyRegisterStatus): string {
@@ -296,6 +300,9 @@ export class KeystoneDevice implements IUsbDevice {
           [PubkeyRegisterStatus.SET_SUCCESS]: 'PRS_SET_PUBKEY_SET_SUCCESS',
           [PubkeyRegisterStatus.SET_FAILED]: 'PRS_SET_PUBKEY_SET_FAILED',
           [PubkeyRegisterStatus.HAS_SET]: 'PRS_SET_PUBKEY_HAS_SET',
+          [PubkeyRegisterStatus.GET_NONCE_PARAMS_INVALID]: 'PRS_GET_NONCE_PARAMS_INVALID',
+          [PubkeyRegisterStatus.GET_NONCE_PARAMS_SUCCESS]: 'PRS_GET_NONCE_PARAMS_SUCCESS',
+          [PubkeyRegisterStatus.GET_NONCE_PARAMS_FAILED]: 'PRS_GET_NONCE_PARAMS_FAILED',
       };
       return map[status] ?? `UNKNOWN_STATUS_${status}`;
   }
@@ -306,6 +313,8 @@ export class KeystoneDevice implements IUsbDevice {
           [PubkeyRegisterStatus.VERIFY_FAILED]: 'Signature verification failed on device.',
           [PubkeyRegisterStatus.SET_FAILED]: 'Device failed to persist public key to secure storage.',
           [PubkeyRegisterStatus.HAS_SET]: 'The device already has a registered public key.',
+          [PubkeyRegisterStatus.GET_NONCE_PARAMS_INVALID]: 'Invalid params while requesting nonce from device.',
+          [PubkeyRegisterStatus.GET_NONCE_PARAMS_FAILED]: 'Device failed to provide nonce parameters.',
       };
       return map[status] ?? 'Device rejected request.';
   }
