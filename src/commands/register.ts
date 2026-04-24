@@ -121,7 +121,7 @@ export function registerRegisterCommand(program: Command) {
              // throw new Error('Device returned failure status. Please check the device screen and try again.');
             console.log(chalk.red(' \n Failed: Device returned failure status. Please check the device screen and try again.'));
             await device.disconnect(); 
-            process.exit(0);
+            process.exit(1);
         }
 
         spinner.succeed(chalk.green('Public key registered successfully!'));
