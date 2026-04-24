@@ -129,7 +129,7 @@ forgebox register --pubkey ./my-keys/pubkey.pem --key ./my-keys/private.pem
 
 ```bash
 # 1. 克隆固件源码
-git clone https://github.com/keystonehq/forgebox-firmware.git
+git clone https://github.com/KeystoneHQ/forgebox-helloworld.git
 
 # 2. 执行构建命令
 forgebox build:firmware ./forgebox-firmware
@@ -150,7 +150,7 @@ forgebox build:firmware ./forgebox-firmware -o ./my-firmware
 如果你更习惯在固件项目内操作，也可以直接在 `forgebox-firmware` 目录下运行构建脚本：
 
 ```bash
-cd forgebox-firmware
+cd forgebox-helloworld
 python3 build.py -e production
 ```
 

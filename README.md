@@ -129,7 +129,7 @@ Use the CLI tool to compile firmware source code.
 
 ```bash
 # 1. Clone firmware source code
-git clone https://github.com/keystonehq/forgebox-firmware.git
+git clone https://github.com/KeystoneHQ/forgebox-helloworld.git
 
 # 2. Execute build command
 forgebox build:firmware ./forgebox-firmware
@@ -150,7 +150,7 @@ This command automatically invokes the `build.py` script in the source directory
 If you prefer to operate within the firmware project, you can also run the build script directly in the `forgebox-firmware` directory:
 
 ```bash
-cd forgebox-firmware
+cd forgebox-helloworld
 python3 build.py -e production
 ```
 
