@@ -1,6 +1,6 @@
 # ForgeBox CLI
 
-ForgeBox CLI is a developer tool for managing ForgeBox devices, generating signing keys, registering device public keys, building firmware, and producing signed OTA packages.
+ForgeBox CLI is a developer tool for managing ForgeBox devices, generating signing keys, registering device public keys, and producing signed OTA packages.
 
 ## Features
 
@@ -8,7 +8,6 @@ ForgeBox CLI is a developer tool for managing ForgeBox devices, generating signi
 - **status**: Display detailed device information such as firmware version and serial number.
 - **keygen**: Generate a secp256k1 key pair in PEM format.
 - **register**: Register a public key on a ForgeBox device with on-device confirmation.
-- **build:firmware**: Build firmware from source.
 - **sign**: Package firmware into a signed OTA image.
 - **interactive** (alias `i`): Launch an interactive menu for common workflows.
 
@@ -140,44 +139,7 @@ forgebox register --pubkey ~/.forgebox/keys/pubkey.pem --key ~/.forgebox/keys/pr
 5. If they match, confirm on the device by swiping.
 6. The device validates the signature and stores the public key.
 
-### 5. Build firmware
-
-Build firmware from the ForgeBox firmware source tree.
-
-**Prerequisites:**
-1. `python3` is installed locally.
-2. The firmware cross-compilation toolchain is installed, such as `arm-none-eabi-gcc`. Refer to the firmware repository for setup details.
-
-```bash
-# 1. Clone firmware source code
-git clone https://github.com/KeystoneHQ/forgebox-helloworld.git
-
-# 2. Execute build command
-forgebox build:firmware ./forgebox-helloworld
-```
-
-**Parameters:**
-- `[source]`: Path to the firmware source directory. Defaults to the current directory.
-- `-o, --out <directory>`: Output directory for build artifacts (default: `./my-firmware`).
-
-**Example:**
-```bash
-forgebox build:firmware ./forgebox-helloworld -o ./my-firmware
-```
-This command runs `build.py` in the source directory and copies the generated firmware image to the output directory as `mh1903_full.bin`.
-
-**Alternative: build manually inside the firmware repository**
-
-If you prefer to work directly in the firmware repository, run the build script there:
-
-```bash
-cd forgebox-helloworld
-python3 build.py -e production
-```
-
-After the build completes, the firmware artifact is located in the build output directory. Copy it to a convenient location if needed, then use `forgebox sign` to create a signed OTA package.
-
-### 6. Sign firmware
+### 5. Sign firmware
 
 Convert a firmware binary into a signed OTA package ready for upgrade.
 
@@ -205,7 +167,7 @@ forgebox sign --s ./my-firmware/mh1903_full.bin \
 3. Signs the required hash with the private key and writes the signature into the OTA header.
 4. Writes an OTA package that can be used directly for device upgrades.
 
-### 7. Interactive mode
+### 6. Interactive mode
 
 Launch an interactive menu for the most common operations.
 

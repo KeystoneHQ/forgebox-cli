@@ -7,7 +7,7 @@ import { registerSignCommand } from './commands/sign';
 import { registerStatusCommand } from './commands/status';
 import { registerListDeviceCommand } from './commands/list-device';
 import { registerInteractiveCommand } from './commands/interactive';
-import { registerBuildCommand } from './commands/build';
+import { registerBuildCommand } from './commands/build'; // eslint-disable-line @typescript-eslint/no-unused-vars
 
 // Read version from package.json
 // Note: importing json directly in TypeScript requires resolveJsonModule configuration
@@ -26,7 +26,7 @@ registerStatusCommand(program);
 registerKeygenCommand(program);
 registerRegisterCommand(program);
 registerSignCommand(program);
-registerBuildCommand(program);
+// registerBuildCommand(program); // Temporarily disabled
 registerInteractiveCommand(program);
 
 // Error handling
