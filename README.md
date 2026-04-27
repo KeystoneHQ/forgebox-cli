@@ -182,13 +182,13 @@ After the build completes, the firmware artifact is located in the build output 
 Convert a firmware binary into a signed OTA package ready for upgrade.
 
 ```bash
-forgebox sign --s <source_firmware_file> --d <signed_file> --key <private_key_file_or_hex>
+forgebox sign --s <source_firmware_file> --d <signed_file> --key <private_key_pem_file>
 ```
 
 **Parameters:**
 - `--s`: Path to the source firmware file, such as `mh1903_full.bin`
 - `--d`: Path to the output OTA package
-- `--key`: Path to a private key file in PEM format, or a 64-character private key hex string
+- `--key`: Path to a private key file in PEM format (required)
 
 **Example:**
 ```bash
@@ -197,7 +197,7 @@ forgebox sign --s ./my-firmware/mh1903_full.bin \
               --key ~/.forgebox/keys/private.pem
 ```
 
-> Passing the private key as a hex string on the command line is still accepted but strongly discouraged: the key ends up in your shell history, `ps` output, and audit logs. Use a PEM file.
+> For security, `sign` only accepts a PEM private key file path.
 
 **What the command does:**
 1. Compresses and chunks the firmware according to the OTA format.
@@ -219,4 +219,4 @@ forgebox interactive
 - **List Devices**: Show connected devices.
 - **Get Device Status**: Show detailed device information.
 - **Generate Key Pair**: Generate a key pair interactively.
-- **Register Public Key**: Register a public key from PEM files or manual hex input.
+- **Register Public Key**: Register a public key from PEM files.

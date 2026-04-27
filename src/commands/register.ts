@@ -7,6 +7,10 @@ import ora from 'ora';
 import { UsbManager } from '../lib/usb-manager';
 import { CryptoManager } from '../lib/crypto';
 
+function shouldUseLegacyRegistration(firmwareVersion: unknown): boolean {
+  return String(firmwareVersion || '').trim() === '1.0.0';
+}
+
 export function registerRegisterCommand(program: Command) {
   program
     .command('register [directory]')
@@ -65,6 +69,7 @@ export function registerRegisterCommand(program: Command) {
       // 2. Generate Proof of Possession
       const prepSpinner = ora('Generating Proof of Possession signature...').start();
       let signature: Buffer;
+      let nonce: Buffer | null = null;
       let rawPubKey: Buffer;
       try {
         // Convert PEM to Raw Public Key (Uncompressed 65 bytes)
@@ -77,11 +82,7 @@ export function registerRegisterCommand(program: Command) {
         console.log(chalk.gray(`\nPreparing to send public key with signature...`));
         console.log(chalk.gray(`  Public key: ${rawPubKey.toString('hex')}`));
 
-        // Sign the UNCOMPRESSED public key bytes
-        signature = CryptoManager.sign(privKeyContent, rawPubKey);
-        console.log(chalk.gray(`  Signature: ${signature.toString('hex')}`));
-        
-        prepSpinner.succeed(`Proof of Possession signature generated (Uncompressed Key: ${rawPubKey.length} bytes).`);
+        prepSpinner.succeed(`Public key prepared (Uncompressed Key: ${rawPubKey.length} bytes).`);
       } catch (error: any) {
         prepSpinner.fail(chalk.red('Failed to generate signature. Please verify your private key and public key are valid and correspond to the same key pair.'));
         console.error(error.message);
@@ -96,15 +97,31 @@ export function registerRegisterCommand(program: Command) {
         // device is already connected
         
         const info = device.getInfo();
+        const status = await device.getStatus();
+        const firmwareVersion = String(status?.firmwareVersion || '').trim();
+        const useLegacyRegistration = shouldUseLegacyRegistration(firmwareVersion);
         // console.log(device,'devicedevice');
         spinner.succeed(chalk.green(`Connected to ${info.product} (${info.manufacturer})`));
         console.log(chalk.gray(`  Serial: ${info.serialNumber}`));
         console.log('');
 
+        spinner.start('Preparing registration...');
+        try {
+          if (useLegacyRegistration) {
+            signature = CryptoManager.sign(privKeyContent, rawPubKey);
+          } else {
+            nonce = await device.getNonce();
+            const signPayload = Buffer.concat([rawPubKey, nonce]);
+            signature = CryptoManager.sign(privKeyContent, signPayload);
+          }
+        } catch {
+          throw new Error('Failed to prepare registration request.');
+        }
+
         // Calculate fingerprint for verification
         const fingerprint = createHash('sha256').update(rawPubKey).digest('hex');
 
-        // 3. Prepare to write
+        // 5. Prepare to write
         spinner.start('Waiting for user confirmation on device...');
         
         console.log('');
@@ -114,12 +131,13 @@ export function registerRegisterCommand(program: Command) {
         console.log(chalk.yellow('  👉 Please COMPARE the fingerprint above with the one shown on the device.'));
         console.log(chalk.yellow('  👉 If they match, SWIPE on the device to confirm registration.\n'));
 
-        // 4. Send command and wait (Send RAW key + Signature)
-        const success = await device.registerPublicKey(rawPubKey, signature);
+        // 6. Send command and wait
+        const success = useLegacyRegistration
+          ? await device.registerPublicKeyLegacy(rawPubKey, signature)
+          : await device.registerPublicKey(rawPubKey, nonce!, signature);
 
         if (!success) {
              // throw new Error('Device returned failure status. Please check the device screen and try again.');
-            console.log(chalk.red(' \n Failed: Device returned failure status. Please check the device screen and try again.'));
             await device.disconnect(); 
             process.exit(1);
         }

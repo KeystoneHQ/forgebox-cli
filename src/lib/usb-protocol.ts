@@ -73,6 +73,7 @@ export enum CmdType {
   EXPORT_ADDRESS = 0x00000004,
   GET_DEVICE_INFO = 0x00000005,
   GET_DEVICE_USB_PUBKEY = 0x00000006,
+  GET_DEVICE_RANDOM = 0x00000007,
 }
 
 // Status Codes (Shared)
@@ -162,9 +163,14 @@ export function parseEapduResponse(data: Buffer): EapduResponse {
   const packetIndex = data.readUInt16BE(EAPDU.OFFSET_P2);
   const requestId = data.readUInt16BE(EAPDU.OFFSET_LC);
   
-  // EAPDU.OFFSET_CDATA is 9.
-  const status = data.readUInt16BE(EAPDU.OFFSET_CDATA);
-  const payload = data.slice(EAPDU.OFFSET_CDATA + 2);
+  // Response format is: [header][payload][status(2 bytes)]
+  const statusOffset = data.length - EAPDU.RESPONSE_STATUS_LENGTH;
+  if (statusOffset < EAPDU.OFFSET_CDATA) {
+    throw new Error('Invalid EAPDU response: missing payload/status boundary');
+  }
+
+  const status = data.readUInt16BE(statusOffset);
+  const payload = data.subarray(EAPDU.OFFSET_CDATA, statusOffset);
   
   let statusMessage = 'Unknown';
   if (status === EAPDU_STATUS.SUCCESS) statusMessage = 'Success';

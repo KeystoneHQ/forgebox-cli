@@ -4,7 +4,11 @@ import { Actions, encode, generateRequestID } from '@keystonehq/hw-transport-usb
 import { getDeviceList, WebUSBDevice } from 'usb';
 import { IUsbDevice, IDeviceInfo } from './usb-interface';
 import { 
+  buildEapduPackets,
   buildPacket,
+  CmdType,
+  EAPDU,
+  parseEapduResponse,
   parseResponse,
   SERVICE_ID,
   DEVICE_INFO_CMD,
@@ -15,6 +19,29 @@ import chalk from 'chalk';
 
 const VENDOR_ID = 0x1209;
 const PRODUCT_ID = 0x3001;
+const USB_NONCE_LEN = 32;
+const USB_SIGNATURE_LEN = 64;
+// Firmware enum CommandType:
+// CMD_GET_DEVICE_USB_PUBKEY = 0x00000006
+// CMD_GET_DEVICE_RANDOM     = 0x00000007
+const ACTION_GET_DEVICE_RANDOM = CmdType.GET_DEVICE_RANDOM;
+
+enum PubkeyRegisterStatus {
+  OK = 0,
+  INVALID_PARAMS = 20,
+  VERIFY_FAILED = 21,
+  VERIFY_SUCCESS = 22,
+  SET_SUCCESS = 23,
+  SET_FAILED = 24,
+  HAS_SET = 25,
+}
+
+enum NonceRequestStatus {
+  OK = 0,
+  RANDOM_NUM_INVALID_PARAMS = 30,
+  RANDOM_NUM_SUCCESS = 31,
+  RANDOM_NUM_FAILED = 32,
+}
 
 export class KeystoneDevice implements IUsbDevice {
   private transport: TransportNodeUSB | null = null;
@@ -105,81 +132,31 @@ export class KeystoneDevice implements IUsbDevice {
     this.endpointOut = null;
   }
 
-  async registerPublicKey(publicKey: Buffer, signature: Buffer): Promise<boolean> {
+  async registerPublicKey(publicKey: Buffer, nonce: Buffer, signature: Buffer): Promise<boolean> {
     if (!this.transport || this.endpointOut === null) throw new Error('Device not connected');
-
-    // Combine payload: [1 byte Length] + [Public Key] + [Signature]
-    const lenBuf = Buffer.alloc(1);
-    lenBuf.writeUInt8(publicKey.length);
-    const data = Buffer.concat([lenBuf, publicKey, signature]);
-    
-    const requestId = generateRequestID();
-    const packets = encode(Actions.CMD_GET_DEVICE_USB_PUBKEY, requestId, data);
-    
-    console.log(`Sending ${packets.length} EAPDU packets...`);
-    
-    const device = (this.transport as any).device as WebUSBDevice;
-    const endpointOut = (this.transport as any).endpoint;
-
-    for (const packet of packets) {
-        const buffer = Uint8Array.from(packet).buffer;
-        const res = await device.transferOut(endpointOut, buffer);
-        if (res.status !== 'ok') throw new Error('Transfer failed');
-        // Small delay to ensure device processes packet
-        await new Promise(resolve => setTimeout(resolve, 20));
+    if (publicKey.length !== 65) {
+      throw new Error(`Invalid public key length: expected 65 bytes, got ${publicKey.length}`);
+    }
+    if (nonce.length !== USB_NONCE_LEN) {
+      throw new Error(`Invalid nonce length: expected ${USB_NONCE_LEN} bytes, got ${nonce.length}`);
+    }
+    if (signature.length !== USB_SIGNATURE_LEN) {
+      throw new Error(`Invalid signature length: expected ${USB_SIGNATURE_LEN} bytes, got ${signature.length}`);
     }
     
-    // Read response
-    try {
-        // 1. Read immediate ACK
-        try {
-            await (this.transport as any).receive(Actions.CMD_GET_DEVICE_USB_PUBKEY, requestId);
-        } catch (e: any) {
-             // Special handling: transportErrorCode 22 means success
-             // or sometimes device returns text "verify pubkey success" which causes parsing error
-             if (e.transportErrorCode === 22 || e.message?.includes('success')) {
-                 // Success, continue
-                 // wait for user swipe
-             } else if (e.transportErrorCode === 25) {
-                  throw new Error('Device already has a public key registered (one registration per lifetime).');
-             } else {
-                 // Surface the device's own diagnostic verbatim instead of a generic
-                 // "check if the file is corrupted" message that hides the real cause
-                 // (USB error, disconnect, firmware-side rejection like "payload too
-                 // short" or "invalid pubkey length").
-                 const detail = e?.message || String(e);
-                 throw new Error(`Device rejected registration: ${detail}`);
-             }
-        }
+    return this.sendPubkeyRegistration(Buffer.concat([publicKey, nonce]), publicKey.length, signature);
+  }
 
-        // 2. Drain any extra ACKs (if device sends ACK per packet)
-        // TransportNodeUSB.receive reads a full response. 
-        // If there are multiple responses, we might need to read again.
-        // However, standard TransportNodeUSB usage implies one response.
-        // We'll skip explicit draining unless we observe issues, 
-        // as receive() consumes a full logical packet.
-
-        // 3. Wait for user swipe confirmation (Long timeout)
-        const originalTimeout = (this.transport as any).requestTimeout;
-        (this.transport as any).requestTimeout = 60000;
-
-        try {
-            await (this.transport as any).receive(Actions.CMD_GET_DEVICE_USB_PUBKEY, requestId);
-            return true;
-        } catch (e: any) {
-            // Check for success keywords or specific error code
-            if (e.transportErrorCode === 23 || e.message?.includes('success')) {
-                return true;
-            }
-            console.error('registerPublicKey failed:', e.message);
-            return false;
-        } finally {
-            (this.transport as any).requestTimeout = originalTimeout;
-        }
-    } catch (e: any) {
-        console.error('registerPublicKey error:', e.message);
-        return false;
+  async registerPublicKeyLegacy(publicKey: Buffer, signature: Buffer): Promise<boolean> {
+    if (!this.transport || this.endpointOut === null) throw new Error('Device not connected');
+    if (publicKey.length !== 65) {
+      throw new Error(`Invalid public key length: expected 65 bytes, got ${publicKey.length}`);
     }
+    if (signature.length !== USB_SIGNATURE_LEN) {
+      throw new Error(`Invalid signature length: expected ${USB_SIGNATURE_LEN} bytes, got ${signature.length}`);
+    }
+
+    return this.sendPubkeyRegistration(publicKey, publicKey.length, signature);
   }
   
   async getStatus(): Promise<any> {
@@ -211,6 +188,34 @@ export class KeystoneDevice implements IUsbDevice {
   
   getInfo(): IDeviceInfo {
       return this._info;
+  }
+
+  async getNonce(): Promise<Buffer> {
+      if (!this.transport || this.endpointOut === null) throw new Error('Device not connected');
+      const requestId = generateRequestID();
+      const packets = buildEapduPackets(ACTION_GET_DEVICE_RANDOM, Buffer.alloc(0), requestId);
+      const device = (this.transport as any).device as WebUSBDevice;
+      const endpointOut = (this.transport as any).endpoint;
+
+      for (const packet of packets) {
+          const buffer = Uint8Array.from(packet).buffer;
+          const res = await device.transferOut(endpointOut, buffer);
+          if (res.status !== 'ok') throw new Error('Transfer failed');
+          await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      const { status, payload } = await this.readNonceResponse(requestId);
+      if (status === NonceRequestStatus.OK || status === NonceRequestStatus.RANDOM_NUM_SUCCESS) {
+          const nonce = this.extractNonceBuffer(payload);
+          if (!nonce) {
+              throw new Error(`Failed to parse nonce payload (${this.getNonceStatusName(status)}).`);
+          }
+          if (nonce.length !== USB_NONCE_LEN) {
+              throw new Error(`Invalid nonce length: expected ${USB_NONCE_LEN} bytes, got ${nonce.length}`);
+          }
+          return nonce;
+      }
+
+      throw new Error(`${this.getNonceStatusMessage(status)} (${this.getNonceStatusName(status)}).`);
   }
 
   async verifySignature(data: Buffer, signature: Buffer): Promise<boolean> {
@@ -270,5 +275,172 @@ export class KeystoneDevice implements IUsbDevice {
       // Protocol packet size can be large, read max
       const data = await this.readRaw(PROTOCOL.MAX_PACKET_SIZE, timeout);
       return parseResponse(data);
+  }
+
+  private async receivePubkeyRegisterStatus(requestId: number): Promise<PubkeyRegisterStatus> {
+      try {
+          await (this.transport as any).receive(Actions.CMD_GET_DEVICE_USB_PUBKEY, requestId);
+          return PubkeyRegisterStatus.OK;
+      } catch (e: any) {
+          const code = e?.transportErrorCode;
+          if (typeof code === 'number') {
+              return code as PubkeyRegisterStatus;
+          }
+          throw e;
+      }
+  }
+
+  private isPubkeyRegisterSuccessStatus(status: PubkeyRegisterStatus): boolean {
+      return status === PubkeyRegisterStatus.OK ||
+        status === PubkeyRegisterStatus.VERIFY_SUCCESS ||
+        status === PubkeyRegisterStatus.SET_SUCCESS;
+  }
+
+  private getPubkeyRegisterStatusName(status: PubkeyRegisterStatus): string {
+      const map: Record<number, string> = {
+          [PubkeyRegisterStatus.OK]: 'OK',
+          [PubkeyRegisterStatus.INVALID_PARAMS]: 'PRS_SET_PUBKEY_INVALID_PARAMS',
+          [PubkeyRegisterStatus.VERIFY_FAILED]: 'PRS_SET_PUBKEY_VERIFY_FAILED',
+          [PubkeyRegisterStatus.VERIFY_SUCCESS]: 'PRS_SET_PUBKEY_VERIFY_SUCCESS',
+          [PubkeyRegisterStatus.SET_SUCCESS]: 'PRS_SET_PUBKEY_SET_SUCCESS',
+          [PubkeyRegisterStatus.SET_FAILED]: 'PRS_SET_PUBKEY_SET_FAILED',
+          [PubkeyRegisterStatus.HAS_SET]: 'PRS_SET_PUBKEY_HAS_SET',
+      };
+      return map[status] ?? `UNKNOWN_STATUS_${status}`;
+  }
+
+  private getPubkeyRegisterStatusMessage(status: PubkeyRegisterStatus): string {
+      const map: Record<number, string> = {
+          [PubkeyRegisterStatus.INVALID_PARAMS]: 'Invalid payload: public key/signature length or format is incorrect.',
+          [PubkeyRegisterStatus.VERIFY_FAILED]: 'Signature verification failed on device.',
+          [PubkeyRegisterStatus.SET_FAILED]: 'Device failed to persist public key to secure storage.',
+          [PubkeyRegisterStatus.HAS_SET]: 'The device already has a registered public key.',
+      };
+      return map[status] ?? 'Device rejected request.';
+  }
+
+  private logPubkeyRegisterFailure(stage: 'ACK' | 'CONFIRM', status: PubkeyRegisterStatus): void {
+      const name = this.getPubkeyRegisterStatusName(status);
+      const msg = this.getPubkeyRegisterStatusMessage(status);
+      console.log(chalk.red(` \n Failed at ${stage}: ${msg} (${name})`));
+  }
+
+  private async readNonceResponse(requestId: number): Promise<{ status: NonceRequestStatus; payload: Buffer }> {
+      const deadline = Date.now() + PROTOCOL.DEFAULT_TIMEOUT;
+
+      while (Date.now() < deadline) {
+          const remaining = Math.max(1, deadline - Date.now());
+          const raw = await this.readRaw(EAPDU.MAX_PACKET_LENGTH, remaining);
+          const response = parseEapduResponse(raw);
+
+          if (response.commandType !== ACTION_GET_DEVICE_RANDOM || response.requestId !== requestId) {
+              continue;
+          }
+
+          return {
+              status: response.status as NonceRequestStatus,
+              payload: response.payload,
+          };
+      }
+
+      throw new Error('Timed out waiting for device nonce response');
+  }
+
+  private async sendPubkeyRegistration(publicKeyPayload: Buffer, publicKeyLength: number, signature: Buffer): Promise<boolean> {
+      await this.transport!.open();
+
+      const lenBuf = Buffer.alloc(1);
+      lenBuf.writeUInt8(publicKeyLength);
+      const data = Buffer.concat([lenBuf, publicKeyPayload, signature]);
+
+      const requestId = generateRequestID();
+      const packets = encode(Actions.CMD_GET_DEVICE_USB_PUBKEY, requestId, data);
+
+      console.log(`Sending ${packets.length} EAPDU packets...`);
+
+      const device = (this.transport as any).device as WebUSBDevice;
+      const endpointOut = (this.transport as any).endpoint;
+
+      for (const packet of packets) {
+          const buffer = Uint8Array.from(packet).buffer;
+          const res = await device.transferOut(endpointOut, buffer);
+          if (res.status !== 'ok') throw new Error('Transfer failed');
+          await new Promise(resolve => setTimeout(resolve, 20));
+      }
+
+      try {
+          const ackStatus = await this.receivePubkeyRegisterStatus(requestId);
+          if (!this.isPubkeyRegisterSuccessStatus(ackStatus)) {
+              this.logPubkeyRegisterFailure('ACK', ackStatus);
+              return false;
+          }
+
+          const originalTimeout = (this.transport as any).requestTimeout;
+          (this.transport as any).requestTimeout = 60000;
+
+          try {
+              const confirmStatus = await this.receivePubkeyRegisterStatus(requestId);
+              if (!this.isPubkeyRegisterSuccessStatus(confirmStatus)) {
+                  this.logPubkeyRegisterFailure('CONFIRM', confirmStatus);
+                  return false;
+              }
+              return true;
+          } finally {
+              (this.transport as any).requestTimeout = originalTimeout;
+          }
+      } catch (e: any) {
+          console.error('registerPublicKey error:', e.message);
+          return false;
+      }
+  }
+
+  private getNonceStatusName(status: NonceRequestStatus): string {
+      const map: Record<number, string> = {
+          [NonceRequestStatus.OK]: 'OK',
+          [NonceRequestStatus.RANDOM_NUM_INVALID_PARAMS]: 'PRS_GET_RANDOM_NUM_INVALID_PARAMS',
+          [NonceRequestStatus.RANDOM_NUM_SUCCESS]: 'PRS_GET_RANDOM_NUM_SUCCESS',
+          [NonceRequestStatus.RANDOM_NUM_FAILED]: 'PRS_GET_RANDOM_NUM_FAILED',
+      };
+      return map[status] ?? `UNKNOWN_NONCE_STATUS_${status}`;
+  }
+
+  private getNonceStatusMessage(status: NonceRequestStatus): string {
+      const map: Record<number, string> = {
+          [NonceRequestStatus.RANDOM_NUM_INVALID_PARAMS]: 'Invalid params while requesting random number from device',
+          [NonceRequestStatus.RANDOM_NUM_FAILED]: 'Device failed to provide random number (nonce)',
+      };
+      return map[status] ?? 'Device nonce request failed';
+  }
+
+  private extractNonceBuffer(payload: unknown): Buffer | null {
+      if (Buffer.isBuffer(payload)) {
+          return payload.length > 0 ? payload : null;
+      }
+      if (payload instanceof Uint8Array) {
+          return payload.length > 0 ? Buffer.from(payload) : null;
+      }
+      if (typeof payload === 'object' && payload !== null) {
+          const obj = payload as Record<string, unknown>;
+          return this.extractNonceBuffer(obj.nonce ?? obj.random ?? obj.random_number ?? obj.payload ?? null);
+      }
+      if (typeof payload !== 'string') {
+          return null;
+      }
+
+      const trimmed = payload.trim();
+      if (!trimmed) return null;
+
+      const hex = trimmed.replace(/^0x/i, '');
+      if (/^[0-9a-fA-F]+$/.test(hex) && hex.length % 2 === 0) {
+          const buf = Buffer.from(hex, 'hex');
+          return buf.length > 0 ? buf : null;
+      }
+
+      try {
+          const parsed = JSON.parse(trimmed) as unknown;
+          return this.extractNonceBuffer(parsed);
+      } catch {
+          return Buffer.from(trimmed, 'utf8');
+      }
   }
 }
