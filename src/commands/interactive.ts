@@ -5,7 +5,7 @@ import ora from 'ora';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { createHash, createPublicKey } from 'crypto';
+import { createPublicKey } from 'crypto';
 import { UsbManager } from '../lib/usb-manager';
 import { CryptoManager } from '../lib/crypto';
 
@@ -13,6 +13,10 @@ const DEFAULT_KEY_DIR = path.join(os.homedir(), '.forgebox', 'keys');
 
 function shouldUseLegacyRegistration(firmwareVersion: unknown): boolean {
   return String(firmwareVersion || '').trim() === '1.0.0';
+}
+
+function formatPublicKeyHex(rawPubKey: Buffer): string {
+  return rawPubKey.toString('hex').match(/.{1,32}/g)?.join('\n  ') || '';
 }
 
 function isInsideGitRepo(dir: string): boolean {
@@ -215,16 +219,15 @@ async function handleRegisterPublicKey() {
       throw new Error('Failed to prepare registration request.');
     }
 
-    // Calculate fingerprint for verification
-    const fingerprint = createHash('sha256').update(rawPubKey).digest('hex');
+    const publicKeyHex = formatPublicKeyHex(rawPubKey);
 
     spinner.start('Waiting for user confirmation on device...');
     
     console.log('');
-    console.log(chalk.cyan('  Public Key Fingerprint (SHA256):'));
-    console.log(chalk.white(`  ${fingerprint}`));
+    console.log(chalk.cyan('  Public Key Hex:'));
+    console.log(chalk.white(`  ${publicKeyHex}`));
     console.log('');
-    console.log(chalk.yellow('  👉 Please COMPARE the fingerprint above with the one shown on the device.'));
+    console.log(chalk.yellow('  👉 Please COMPARE the public key hex above with the one shown on the device.'));
     console.log(chalk.yellow('  👉 If they match, SWIPE on the device to confirm registration.\n'));
 
     const success = useLegacyRegistration
