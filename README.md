@@ -134,8 +134,8 @@ forgebox register --pubkey ~/.forgebox/keys/pubkey.pem --key ~/.forgebox/keys/pr
 **Registration flow:**
 1. The CLI verifies that the key pair matches and generates a proof-of-possession signature.
 2. It discovers and connects to the ForgeBox device over USB.
-3. It prints the public key fingerprint as a SHA-256 hash.
-4. Compare that fingerprint with the one shown on the device.
+3. It prints the public key hex in the same display format as the device.
+4. Compare that public key hex with the one shown on the device.
 5. If they match, confirm on the device by swiping.
 6. The device validates the signature and stores the public key.
 

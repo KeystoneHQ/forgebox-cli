@@ -1,11 +1,11 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
-import { createHash, createPublicKey } from 'crypto';
 import chalk from 'chalk';
 import ora from 'ora';
 import { UsbManager } from '../lib/usb-manager';
 import { CryptoManager } from '../lib/crypto';
+import { formatHighlightedDeviceDisplayPublicKeyHex } from '../lib/cli-display';
 
 function shouldUseLegacyRegistration(firmwareVersion: unknown): boolean {
   return String(firmwareVersion || '').trim() === '1.0.0';
@@ -72,15 +72,11 @@ export function registerRegisterCommand(program: Command) {
       let nonce: Buffer | null = null;
       let rawPubKey: Buffer;
       try {
-        // Convert PEM to Raw Public Key (Uncompressed 65 bytes)
-        const keyObj = createPublicKey(pubKeyContent);
-        const der = keyObj.export({ format: 'der', type: 'spki' });
-        
-        // Extract uncompressed key: 0x04 + X (32) + Y (32)
-        rawPubKey = der.subarray(der.length - 65);
+        rawPubKey = CryptoManager.extractRawPublicKey(pubKeyContent);
 
         console.log(chalk.gray(`\nPreparing to send public key with signature...`));
-        console.log(chalk.gray(`  Public key: ${rawPubKey.toString('hex')}`));
+        console.log(chalk.gray('  Public key:'));
+        console.log(`  ${CryptoManager.formatDeviceDisplayPublicKeyHex(rawPubKey)}`);
 
         prepSpinner.succeed(`Public key prepared (Uncompressed Key: ${rawPubKey.length} bytes).`);
       } catch (error: any) {
@@ -118,17 +114,16 @@ export function registerRegisterCommand(program: Command) {
           throw new Error('Failed to prepare registration request.');
         }
 
-        // Calculate fingerprint for verification
-        const fingerprint = createHash('sha256').update(rawPubKey).digest('hex');
+        const publicKeyHex = formatHighlightedDeviceDisplayPublicKeyHex(rawPubKey);
 
         // 5. Prepare to write
         spinner.start('Waiting for user confirmation on device...');
         
         console.log('');
-        console.log(chalk.cyan('  Public Key Fingerprint (SHA256):'));
-        console.log(chalk.white(`  ${fingerprint}`));
+        console.log(chalk.cyan('  Public Key Hex:'));
+        console.log(`  ${publicKeyHex}`);
         console.log('');
-        console.log(chalk.yellow('  👉 Please COMPARE the fingerprint above with the one shown on the device.'));
+        console.log(chalk.yellow('  👉 Please COMPARE the public key hex above with the one shown on the device.'));
         console.log(chalk.yellow('  👉 If they match, SWIPE on the device to confirm registration.\n'));
 
         // 6. Send command and wait
