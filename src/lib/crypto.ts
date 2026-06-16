@@ -1,4 +1,4 @@
-import { generateKeyPairSync, createSign, createVerify, createHash } from 'crypto';
+import { generateKeyPairSync, createVerify, createHash, createPublicKey } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ec as EC } from 'elliptic';
@@ -47,6 +47,35 @@ export class CryptoManager {
     try { fs.chmodSync(privPath, 0o600); } catch { /* best-effort on Windows */ }
 
     return { pubPath, privPath };
+  }
+
+  static extractRawPublicKey(publicKeyPem: string): Buffer {
+    const keyObj = createPublicKey(publicKeyPem);
+    const der = keyObj.export({ format: 'der', type: 'spki' });
+    return der.subarray(der.length - 65);
+  }
+
+  static getDeviceDisplayPublicKey(publicKey: Buffer): Buffer {
+    if (publicKey.length === 65 && publicKey[0] === 0x04) {
+      return publicKey.subarray(1);
+    }
+
+    return publicKey;
+  }
+
+  static getDeviceDisplayPublicKeyHexGroups(publicKey: Buffer): string[] {
+    return CryptoManager.getDeviceDisplayPublicKey(publicKey).toString('hex').toUpperCase().match(/.{1,4}/g) || [];
+  }
+
+  static formatDeviceDisplayPublicKeyHex(publicKey: Buffer): string {
+    const groups = CryptoManager.getDeviceDisplayPublicKeyHexGroups(publicKey);
+    const lines: string[] = [];
+
+    for (let i = 0; i < groups.length; i += 16) {
+      lines.push(groups.slice(i, i + 16).join(' '));
+    }
+
+    return lines.join('\n  ');
   }
 
   /**

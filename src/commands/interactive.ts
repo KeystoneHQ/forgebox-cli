@@ -5,18 +5,14 @@ import ora from 'ora';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { createPublicKey } from 'crypto';
 import { UsbManager } from '../lib/usb-manager';
 import { CryptoManager } from '../lib/crypto';
+import { formatHighlightedDeviceDisplayPublicKeyHex } from '../lib/cli-display';
 
 const DEFAULT_KEY_DIR = path.join(os.homedir(), '.forgebox', 'keys');
 
 function shouldUseLegacyRegistration(firmwareVersion: unknown): boolean {
   return String(firmwareVersion || '').trim() === '1.0.0';
-}
-
-function formatPublicKeyHex(rawPubKey: Buffer): string {
-  return rawPubKey.toString('hex').match(/.{1,32}/g)?.join('\n  ') || '';
 }
 
 function isInsideGitRepo(dir: string): boolean {
@@ -174,17 +170,14 @@ async function handleRegisterPublicKey() {
       const pubKeyContent = fs.readFileSync(pubPath, 'utf-8');
       const privKeyContent = fs.readFileSync(privPath, 'utf-8');
 
-      // Parse Public Key PEM to Raw
-      const keyObj = createPublicKey(pubKeyContent);
-      const der = keyObj.export({ format: 'der', type: 'spki' });
-      // Extract uncompressed key: last 65 bytes
-      rawPubKey = der.subarray(der.length - 65);
+      rawPubKey = CryptoManager.extractRawPublicKey(pubKeyContent);
       
       // Use PEM content for signing
     rawPrivKey = privKeyContent;
     
     console.log(chalk.gray(`\nLoaded keys from ${dirPath}`));
-    console.log(chalk.gray(`Public Key: ${rawPubKey.toString('hex')}`));
+    console.log(chalk.gray('Public Key:'));
+    console.log(`  ${CryptoManager.formatDeviceDisplayPublicKeyHex(rawPubKey)}`);
   } catch (e: any) {
     console.log(chalk.red('Failed to generate signature. Please verify your private key and public key are valid and correspond to the same key pair.'));
     console.log(e.message);
@@ -219,13 +212,13 @@ async function handleRegisterPublicKey() {
       throw new Error('Failed to prepare registration request.');
     }
 
-    const publicKeyHex = formatPublicKeyHex(rawPubKey);
+    const publicKeyHex = formatHighlightedDeviceDisplayPublicKeyHex(rawPubKey);
 
     spinner.start('Waiting for user confirmation on device...');
     
     console.log('');
     console.log(chalk.cyan('  Public Key Hex:'));
-    console.log(chalk.white(`  ${publicKeyHex}`));
+    console.log(`  ${publicKeyHex}`);
     console.log('');
     console.log(chalk.yellow('  👉 Please COMPARE the public key hex above with the one shown on the device.'));
     console.log(chalk.yellow('  👉 If they match, SWIPE on the device to confirm registration.\n'));
