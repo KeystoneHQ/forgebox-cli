@@ -9,21 +9,11 @@ importers:
   .:
     dependencies:
       '@keystonehq/hw-transport-nodeusb':
-        specifier: 0.1.1-alpha.0
-        version: 0.1.1-alpha.0
+        specifier: 0.2.0
+        version: 0.2.0
       '@keystonehq/hw-transport-usb':
-        specifier: 0.1.4-alpha.0
-        version: 0.1.4-alpha.0
-    devDependencies:
-      '@types/elliptic':
-        specifier: 6.4.18
-        version: 6.4.18
-      '@types/inquirer':
-        specifier: 9.0.9
-        version: 9.0.9
-      '@types/node':
-        specifier: 25.0.10
-        version: 25.0.10
+        specifier: 0.2.0
+        version: 0.2.0
       chalk:
         specifier: 4.1.2
         version: 4.1.2
@@ -39,6 +29,19 @@ importers:
       ora:
         specifier: 5.4.1
         version: 5.4.1
+      usb:
+        specifier: 2.17.0
+        version: 2.17.0
+    devDependencies:
+      '@types/elliptic':
+        specifier: 6.4.18
+        version: 6.4.18
+      '@types/inquirer':
+        specifier: 9.0.9
+        version: 9.0.9
+      '@types/node':
+        specifier: 25.0.10
+        version: 25.0.10
       ts-node:
         specifier: 10.9.2
         version: 10.9.2(@types/node@25.0.10)(typescript@5.9.3)
@@ -74,11 +77,11 @@ packages:
   '@keystonehq/hw-transport-error@0.0.2':
     resolution: {integrity: sha512-j6rOJU277Cmq9oBiFjtVHJhUZ/gELGYGZMUXBlAom1WyK8pNrD3+I8kCVGp5Ss5oB+Zqo7Az5xCx/z+0i+Y40A==}
 
-  '@keystonehq/hw-transport-nodeusb@0.1.1-alpha.0':
-    resolution: {integrity: sha512-ptxyeJHmjKsxyzmpwJ4rZsuwB2gDiedvV7tWUp0JpoZ2ZA+Uxi8AWfhk/ryXgwinY3tR/2/4JdlPzRbMtC+a4g==}
+  '@keystonehq/hw-transport-nodeusb@0.2.0':
+    resolution: {integrity: sha512-RO6irodMLk+SOTycwV+VTlFWzvxi79vC6q/P/PmCzBpLWS5r+bOKACH+xa/AbeYi2h/q5Biam88GP+xNo29uUA==}
 
-  '@keystonehq/hw-transport-usb@0.1.4-alpha.0':
-    resolution: {integrity: sha512-i110ioeQ9hVQXlWrM9DHN2jI8BNvrFq86Ta1EN6/mNU3QtM2xILSTClAWCt7pryhxaE0uRMONgcPo6rOk2q6ow==}
+  '@keystonehq/hw-transport-usb@0.2.0':
+    resolution: {integrity: sha512-Vi1b8oFZy4aa0vxtpfBrkLXNzh1yBFEl7St/WwSBztLFtjNfldF3DaHtOYaPQWDYAXuCzaancbdjDPkSo/GQSw==}
 
   '@tsconfig/node10@1.0.12':
     resolution: {integrity: sha512-UCYBaeFvM11aU2y3YPZ//O5Rhj+xKyzy7mvcIoAjASbigy8mHMryP5cK7dgjlz2hWxh1g5pLw084E0a/wlUSFQ==}
@@ -360,6 +363,10 @@ packages:
     resolution: {integrity: sha512-I3lzVOH21BsO6qPYvx1C7Ji08lbuM0qmsEtNGAphqlhNME5cz/vExY+jIXZl+HQIRybI/sTxdyLab5tALsL69w==}
     engines: {node: '>=12.22.0 <13.0 || >=14.17.0'}
 
+  usb@2.17.0:
+    resolution: {integrity: sha512-UuFgrlglgDn5ll6d5l7kl3nDb2Yx43qLUGcDq+7UNLZLtbNug0HZBb2Xodhgx2JZB1LqvU+dOGqLEeYUeZqsHg==}
+    engines: {node: '>=12.22.0 <13.0 || >=14.17.0'}
+
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
@@ -401,14 +408,14 @@ snapshots:
 
   '@keystonehq/hw-transport-error@0.0.2': {}
 
-  '@keystonehq/hw-transport-nodeusb@0.1.1-alpha.0':
+  '@keystonehq/hw-transport-nodeusb@0.2.0':
     dependencies:
       '@keystonehq/hw-transport-error': 0.0.2
-      '@keystonehq/hw-transport-usb': 0.1.4-alpha.0
+      '@keystonehq/hw-transport-usb': 0.2.0
       buffer: 6.0.3
       usb: 2.14.0
 
-  '@keystonehq/hw-transport-usb@0.1.4-alpha.0':
+  '@keystonehq/hw-transport-usb@0.2.0':
     dependencies:
       '@keystonehq/hw-transport-error': 0.0.2
       buffer: 6.0.3
@@ -689,6 +696,12 @@ snapshots:
   undici-types@7.16.0: {}
 
   usb@2.14.0:
+    dependencies:
+      '@types/w3c-web-usb': 1.0.13
+      node-addon-api: 8.5.0
+      node-gyp-build: 4.8.4
+
+  usb@2.17.0:
     dependencies:
       '@types/w3c-web-usb': 1.0.13
       node-addon-api: 8.5.0
