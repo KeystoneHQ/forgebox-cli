@@ -347,8 +347,8 @@ export class KeystoneDevice implements IUsbDevice {
   }
 
   private async sendPubkeyRegistration(publicKeyPayload: Buffer, publicKeyLength: number, signature: Buffer): Promise<boolean> {
-      await this.transport!.open();
-
+      // The transport is already open from connect(). Opening it again resets the
+      // device, which drops the registration session the nonce belongs to.
       const lenBuf = Buffer.alloc(1);
       lenBuf.writeUInt8(publicKeyLength);
       const data = Buffer.concat([lenBuf, publicKeyPayload, signature]);
